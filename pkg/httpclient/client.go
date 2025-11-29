@@ -68,13 +68,18 @@ func (c *Client) SendRequest(method, url, body string) (*Response, error) {
 // FormatResponse formats a response for display
 func FormatResponse(resp *Response) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("[white]Status:[green] %d %s  [white]Time: [cyan]%.0fms\n",
-		resp.StatusCode, resp.Status, float64(resp.Duration.Milliseconds())))
-	sb.WriteString("[blue]--- Headers ---[white]\n")
+	// Use success green accent for status, primary accent for headers
+	statusColor := "[#50fa7b]" // Success green accent
+	if resp.StatusCode >= 400 {
+		statusColor = "[red]" // Error red
+	}
+	sb.WriteString(fmt.Sprintf("[white]Status:%s %d %s  [white]Time: [#58a6ff]%.0fms[-]\n",
+		statusColor, resp.StatusCode, resp.Status, float64(resp.Duration.Milliseconds())))
+	sb.WriteString("[#58a6ff]--- Headers ---[white]\n")
 	for k, v := range resp.Headers {
 		sb.WriteString(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ", ")))
 	}
-	sb.WriteString("\n[blue]--- Body ---[white]\n")
+	sb.WriteString("\n[#58a6ff]--- Body ---[white]\n")
 	sb.Write(resp.Body)
 	return sb.String()
 }
