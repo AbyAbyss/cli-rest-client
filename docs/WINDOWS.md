@@ -209,3 +209,4 @@ go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
 - See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines
 - See [README.md](../README.md) for general usage
 
+

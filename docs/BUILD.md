@@ -176,3 +176,4 @@ go build -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME" \
 
 The Makefile handles this automatically when you use `make build`.
 
+

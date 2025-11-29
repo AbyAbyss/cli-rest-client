@@ -18,3 +18,4 @@ fi
 echo "Running $APP_NAME..."
 ./$BIN_DIR/$APP_NAME
 
+

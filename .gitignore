@@ -4,7 +4,6 @@
 *.dll
 *.so
 *.dylib
-term-rest-client
 bin/
 dist/
 
