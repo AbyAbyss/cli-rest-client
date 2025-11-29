@@ -221,13 +221,16 @@ func main() {
 
 	// ---------- TOP: TAB BAR ----------
 
+	// Declare applyTheme variable (will be defined later, needed by settings panel)
+	var applyTheme func(*Theme)
+
 	tabBar := tview.NewTextView()
 	tabBar.SetDynamicColors(true)
 	tabBar.SetTextAlign(tview.AlignLeft)
 	tabBar.SetBorder(false)
 	tabBar.SetBackgroundColor(currentTheme.BackgroundMain)
 
-	tabs := []string{"Builder", "Params", "Auth", "Headers", "Body", "Pre-request", "Tests"}
+	tabs := []string{"Builder", "Params", "Auth", "Headers", "Body", "Pre-request", "Tests", "Settings"}
 
 	updateTabBar := func() {
 		var sb strings.Builder
@@ -350,9 +353,139 @@ func main() {
 	placeholder.SetWordWrap(true)
 	placeholder.SetBorderPadding(0, 0, 1, 1)
 
+	// ---------- SETTINGS TAB ----------
+	settingsLabel := tview.NewTextView()
+	settingsLabel.SetDynamicColors(true)
+	settingsLabel.SetText(fmt.Sprintf("[%s::b]Application Settings", currentTheme.HexTextPrimary))
+	settingsLabel.SetBorder(false)
+	settingsLabel.SetBackgroundColor(currentTheme.BackgroundMain)
+
+	themeLabel := tview.NewTextView()
+	themeLabel.SetDynamicColors(true)
+	themeLabel.SetText(fmt.Sprintf("[%s]Theme:", currentTheme.HexTextSecondary))
+	themeLabel.SetBorder(false)
+	themeLabel.SetBackgroundColor(currentTheme.BackgroundMain)
+
+	themes := []string{"Catppuccin Mocha", "Original"}
+	themeDrop := tview.NewDropDown()
+	themeDrop.SetLabel(" ")
+	themeDrop.SetOptions(themes, func(text string, index int) {
+		if index == 0 {
+			currentTheme = &themeCatppuccinMocha
+		} else if index == 1 {
+			currentTheme = &themeOriginal
+		}
+		// Only call applyTheme if it's been defined
+		if applyTheme != nil {
+			applyTheme(currentTheme)
+			updateTabBar()
+			// Update theme dropdown styling
+			themeDrop.SetTitleColor(currentTheme.AccentPrimary)
+			themeDrop.SetBorderColor(currentTheme.Border)
+			themeDrop.SetBackgroundColor(currentTheme.BackgroundMain)
+			themeDrop.SetFieldBackgroundColor(currentTheme.BackgroundInput)
+			themeDrop.SetFieldTextColor(currentTheme.TextPrimary)
+		}
+	})
+	// Set initial selection based on current theme (after options are set)
+	if currentTheme.Name == "Catppuccin Mocha" {
+		themeDrop.SetCurrentOption(0)
+	} else {
+		themeDrop.SetCurrentOption(1)
+	}
+	themeDrop.SetBorder(true)
+	themeDrop.SetTitle(" Select Theme ")
+	themeDrop.SetTitleColor(currentTheme.AccentPrimary)
+	themeDrop.SetBorderColor(currentTheme.Border)
+	themeDrop.SetBackgroundColor(currentTheme.BackgroundMain)
+	themeDrop.SetFieldBackgroundColor(currentTheme.BackgroundInput)
+	themeDrop.SetFieldTextColor(currentTheme.TextPrimary)
+	themeDrop.SetBorderPadding(0, 0, 1, 1)
+
+	themeRow := tview.NewFlex()
+	themeRow.SetDirection(tview.FlexColumn)
+	themeRow.AddItem(themeLabel, 10, 0, false)
+	themeRow.AddItem(themeDrop, 0, 1, true)
+
+	// Command reference section
+	commandsLabel := tview.NewTextView()
+	commandsLabel.SetDynamicColors(true)
+	commandsLabel.SetText(fmt.Sprintf("[%s::b]Keyboard Commands", currentTheme.HexTextPrimary))
+	commandsLabel.SetBorder(false)
+	commandsLabel.SetBackgroundColor(currentTheme.BackgroundMain)
+
+	commandsText := fmt.Sprintf(`[%s]Collections & Requests:
+[%s]  n  [%s] Create new collection
+[%s]  r  [%s] Create new empty request
+[%s]  e  [%s] Edit selected item name
+[%s]  d  [%s] Delete selected item
+[%s]  Delete  [%s] Delete selected item
+
+[%s]Request Operations:
+[%s]  Ctrl+Enter  [%s] Send request
+[%s]  Ctrl+S  [%s] Send request
+[%s]  Ctrl+Shift+S  [%s] Save current request
+
+[%s]Navigation:
+[%s]  Tab  [%s] Move to next field
+[%s]  Shift+Tab  [%s] Move to previous field
+[%s]  1-8  [%s] Switch tabs
+[%s]  Esc / Ctrl+Q  [%s] Quit application`,
+		currentTheme.HexTextPrimary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexTextPrimary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexTextPrimary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary,
+		currentTheme.HexAccentPrimary, currentTheme.HexTextSecondary)
+
+	commandsView := tview.NewTextView()
+	commandsView.SetDynamicColors(true)
+	commandsView.SetText(commandsText)
+	commandsView.SetBorder(true)
+	commandsView.SetTitle(" Commands ")
+	commandsView.SetTitleColor(currentTheme.AccentPrimary)
+	commandsView.SetBorderColor(currentTheme.Border)
+	commandsView.SetBackgroundColor(currentTheme.BackgroundMain)
+	commandsView.SetScrollable(true)
+	commandsView.SetWordWrap(true)
+	commandsView.SetBorderPadding(1, 1, 1, 1)
+
+	infoLabel := tview.NewTextView()
+	infoLabel.SetDynamicColors(true)
+	infoLabel.SetText(fmt.Sprintf("[%s]Version: %s\nBuild Time: %s", currentTheme.HexTextSecondary, Version, BuildTime))
+	infoLabel.SetBorder(false)
+	infoLabel.SetBackgroundColor(currentTheme.BackgroundMain)
+
+	settingsPanel := tview.NewFlex()
+	settingsPanel.SetDirection(tview.FlexRow)
+	settingsPanel.AddItem(settingsLabel, 1, 0, false)
+	settingsPanel.AddItem(tview.NewBox().SetBorder(false), 1, 0, false) // Spacer
+	settingsPanel.AddItem(themeRow, 3, 0, false)
+	settingsPanel.AddItem(tview.NewBox().SetBorder(false), 1, 0, false) // Spacer
+	settingsPanel.AddItem(commandsLabel, 1, 0, false)
+	settingsPanel.AddItem(commandsView, 0, 1, true)                     // Make commands view scrollable and take remaining space
+	settingsPanel.AddItem(tview.NewBox().SetBorder(false), 1, 0, false) // Spacer
+	settingsPanel.AddItem(infoLabel, 2, 0, false)
+	settingsPanel.SetBorder(true)
+	settingsPanel.SetTitle(" Settings ")
+	settingsPanel.SetTitleColor(currentTheme.AccentPrimary)
+	settingsPanel.SetBorderColor(currentTheme.Border)
+	settingsPanel.SetBackgroundColor(currentTheme.BackgroundMain)
+	settingsPanel.SetBorderPadding(1, 1, 1, 1)
+
 	centerPages := tview.NewPages()
 	centerPages.AddPage("builder", builderPanel, true, true)
 	centerPages.AddPage("other", placeholder, true, false)
+	centerPages.AddPage("settings", settingsPanel, true, false)
 
 	// ---------- RIGHT MAIN COLUMN ----------
 
@@ -396,7 +529,7 @@ func main() {
 
 	// ---------- THEME APPLICATION FUNCTION ----------
 
-	applyTheme := func(theme *Theme) {
+	applyTheme = func(theme *Theme) {
 		// Apply global styles
 		tview.Styles.PrimitiveBackgroundColor = theme.BackgroundMain
 		tview.Styles.ContrastBackgroundColor = theme.BackgroundMain
@@ -490,6 +623,60 @@ func main() {
 			}
 		}
 		updateNodeColors(rootNode)
+
+		// Apply to settings panel
+		settingsLabel.SetText(fmt.Sprintf("[%s::b]Application Settings", theme.HexTextPrimary))
+		settingsLabel.SetBackgroundColor(theme.BackgroundMain)
+		themeLabel.SetText(fmt.Sprintf("[%s]Theme:", theme.HexTextSecondary))
+		themeLabel.SetBackgroundColor(theme.BackgroundMain)
+		themeDrop.SetTitleColor(theme.AccentPrimary)
+		themeDrop.SetBorderColor(theme.Border)
+		themeDrop.SetBackgroundColor(theme.BackgroundMain)
+		themeDrop.SetFieldBackgroundColor(theme.BackgroundInput)
+		themeDrop.SetFieldTextColor(theme.TextPrimary)
+		commandsLabel.SetText(fmt.Sprintf("[%s::b]Keyboard Commands", theme.HexTextPrimary))
+		commandsLabel.SetBackgroundColor(theme.BackgroundMain)
+		commandsText := fmt.Sprintf(`[%s]Collections & Requests:
+[%s]  n  [%s] Create new collection
+[%s]  r  [%s] Create new empty request
+[%s]  e  [%s] Edit selected item name
+[%s]  d  [%s] Delete selected item
+[%s]  Delete  [%s] Delete selected item
+
+[%s]Request Operations:
+[%s]  Ctrl+Enter  [%s] Send request
+[%s]  Ctrl+S  [%s] Send request
+[%s]  Ctrl+Shift+S  [%s] Save current request
+
+[%s]Navigation:
+[%s]  Tab  [%s] Move to next field
+[%s]  Shift+Tab  [%s] Move to previous field
+[%s]  1-8  [%s] Switch tabs
+[%s]  Esc / Ctrl+Q  [%s] Quit application`,
+			theme.HexTextPrimary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexTextPrimary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexTextPrimary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary,
+			theme.HexAccentPrimary, theme.HexTextSecondary)
+		commandsView.SetText(commandsText)
+		commandsView.SetTitleColor(theme.AccentPrimary)
+		commandsView.SetBorderColor(theme.Border)
+		commandsView.SetBackgroundColor(theme.BackgroundMain)
+		infoLabel.SetText(fmt.Sprintf("[%s]Version: %s\nBuild Time: %s", theme.HexTextSecondary, Version, BuildTime))
+		infoLabel.SetBackgroundColor(theme.BackgroundMain)
+		settingsPanel.SetTitleColor(theme.AccentPrimary)
+		settingsPanel.SetBorderColor(theme.Border)
+		settingsPanel.SetBackgroundColor(theme.BackgroundMain)
 	}
 
 	// Apply initial theme
@@ -861,8 +1048,8 @@ func main() {
 			return nil
 		}
 
-		// Tabs: 1–7
-		if ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && ev.Rune() <= '7' {
+		// Tabs: 1–8
+		if ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && ev.Rune() <= '8' {
 			idx := int(ev.Rune() - '1')
 			if idx >= len(tabs) {
 				return ev
@@ -871,9 +1058,16 @@ func main() {
 			if idx == 0 {
 				centerPages.ShowPage("builder")
 				centerPages.HidePage("other")
+				centerPages.HidePage("settings")
+			} else if idx == 7 {
+				// Settings tab (8th tab, index 7)
+				centerPages.ShowPage("settings")
+				centerPages.HidePage("builder")
+				centerPages.HidePage("other")
 			} else {
 				centerPages.ShowPage("other")
 				centerPages.HidePage("builder")
+				centerPages.HidePage("settings")
 			}
 			updateTabBar()
 			return nil
@@ -917,6 +1111,60 @@ func main() {
 				rootNode.AddChild(newCollection)
 				tree.SetCurrentNode(newCollection)
 				editNodeName(newCollection)
+				return nil
+			}
+		}
+
+		// Create new request: 'r' when tree is focused
+		if ev.Key() == tcell.KeyRune && (ev.Rune() == 'r' || ev.Rune() == 'R') {
+			if app.GetFocus() == tree {
+				currentNode := tree.GetCurrentNode()
+				var targetCollection *tview.TreeNode
+
+				if currentNode != nil && currentNode != rootNode {
+					data := currentNode.GetReference()
+					if data != nil {
+						if nodeData, ok := data.(*models.TreeNodeData); ok {
+							if nodeData.IsCollection {
+								targetCollection = currentNode
+							} else {
+								targetCollection = findParentNode(currentNode)
+							}
+						}
+					}
+				}
+
+				if targetCollection == nil || targetCollection == rootNode {
+					// If no valid collection, use first available or create one
+					if len(rootNode.GetChildren()) > 0 {
+						targetCollection = rootNode.GetChildren()[0]
+					} else {
+						targetCollection = makeCollectionNode("New Collection")
+						rootNode.AddChild(targetCollection)
+					}
+				}
+
+				// Create new empty request
+				newReq := makeReqNode(
+					fmt.Sprintf("[%s]GET[%s] New Request", getMethodColor("GET"), currentTheme.HexTextPrimary),
+					"GET",
+					"",
+					"",
+					"New Request",
+				)
+				targetCollection.AddChild(newReq)
+				tree.SetCurrentNode(newReq)
+
+				// Load the new request into the builder
+				state.Method = "GET"
+				state.URL = ""
+				state.Body = ""
+				methodDrop.SetCurrentOption(0)
+				urlInput.SetText("")
+				bodyArea.SetText("", true)
+				responseView.SetText(fmt.Sprintf("[%s]New request created. Start building your request.", currentTheme.HexTextSecondary))
+
+				editNodeName(newReq)
 				return nil
 			}
 		}

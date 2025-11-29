@@ -5,9 +5,16 @@ A beautiful, feature-rich terminal-based REST API client built with Go and [tvie
 ![Term REST Client](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
 
+## 📸 Screenshot
+
+![Term REST Client Screenshot](assets/screenshot.png)
+
+*Term REST Client in action: Building a PUT request, viewing collections, and displaying the response with headers and body.*
+
 ## ✨ Features
 
 - 🎨 **Beautiful Terminal UI** - Modern, colorful interface built with tview
+- 🎭 **Multiple Themes** - Switch between Catppuccin Mocha and Original themes
 - 🖱️ **Mouse Support** - Click to focus and interact with UI elements
 - 📁 **Request Collections** - Organize requests into collections
 - 💾 **Save & Load** - Save requests to collections for quick access
@@ -17,6 +24,7 @@ A beautiful, feature-rich terminal-based REST API client built with Go and [tvie
 - 📊 **Response Viewer** - View status, headers, and body with syntax highlighting
 - ⚡ **Fast & Lightweight** - Pure Go, no dependencies on external services
 - ⌨️ **Keyboard Shortcuts** - Full keyboard navigation support
+- ⚙️ **Settings Tab** - Customize theme and view application information
 
 ## 🚀 Quick Start
 
@@ -183,18 +191,86 @@ make build-darwin
    - Focus on the tree
    - Press `n` to create a new collection
 
+7. **Change Theme**
+   - Press `8` to open the Settings tab
+   - Use the Theme dropdown to switch between available themes
+   - Changes apply immediately
+
 ### Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Tab` / `Shift+Tab` | Navigate between fields |
-| `Ctrl+Enter` / `Ctrl+S` | Send request |
-| `Ctrl+Shift+S` | Save current request |
-| `1-7` | Switch tabs |
-| `e` | Edit selected item name |
-| `d` / `Delete` | Delete selected item |
-| `n` | Create new collection |
-| `Esc` / `Ctrl+Q` | Quit application |
+#### Navigation & Focus
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Tab` | Move focus to next field | Anywhere |
+| `Shift+Tab` | Move focus to previous field | Anywhere |
+| `1-8` | Switch between tabs | Anywhere |
+| Arrow Keys | Navigate tree/collections | Collections tree focused |
+| `Enter` | Select/load request | Collections tree focused |
+
+#### Request Operations
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Ctrl+Enter` | Send HTTP request | Builder tab |
+| `Ctrl+S` | Send HTTP request | Builder tab |
+| `Ctrl+Shift+S` | Save current request to collection | Builder tab |
+| `Enter` | Send request (when URL field focused) | URL input field |
+
+#### Collection & Request Management
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `n` | Create new collection | Collections tree focused |
+| `r` | Create new empty request | Collections tree focused |
+| `e` | Edit selected item name | Collections tree focused (item selected) |
+| `d` | Delete selected item | Collections tree focused (item selected) |
+| `Delete` | Delete selected item | Collections tree focused (item selected) |
+
+#### Application Control
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Esc` | Quit application | Anywhere |
+| `Ctrl+Q` | Quit application | Anywhere |
+
+### Command Rules
+
+#### Creating Collections
+- **Method 1**: Focus the Collections tree (left panel) and press `n`
+  - A new collection named "New Collection" will be created
+  - You'll be prompted to rename it immediately
+  - Press `Enter` to confirm or `Esc` to cancel
+
+- **Method 2**: When saving a request with `Ctrl+Shift+S`, if no collection exists, one will be created automatically
+
+#### Creating Requests
+- **Method 1**: Focus the Collections tree, select a collection (or leave root selected), and press `r`
+  - Creates a new empty request with default GET method
+  - Loads it into the builder automatically
+  - You'll be prompted to rename it immediately
+
+- **Method 2**: Build your request in the builder, then press `Ctrl+Shift+S`
+  - Saves the current request to the selected collection
+  - If no collection is selected, saves to the first available collection
+  - If no collections exist, creates a new collection automatically
+
+#### Editing Items
+- Select any collection or request in the tree
+- Press `e` to edit its name
+- Enter the new name and press `Enter` to save, or `Esc` to cancel
+
+#### Deleting Items
+- Select any collection or request in the tree
+- Press `d` or `Delete` key
+- Confirm deletion in the modal dialog
+- **Note**: Deleting a collection will delete all requests within it
+
+#### Sending Requests
+- **Method 1**: Fill in URL, select method, add body (optional), then press `Ctrl+Enter` or `Ctrl+S`
+- **Method 2**: Fill in URL, select method, add body (optional), then click the `SEND` button
+- **Method 3**: When URL field is focused, press `Enter` to send
+
+#### Loading Saved Requests
+- Navigate to a saved request in the Collections tree
+- Press `Enter` or click on it
+- The request will be loaded into the builder with its method, URL, and body
 
 ### Mouse Support
 
