@@ -16,7 +16,7 @@ run.bat
 
 ### Option 3: Go Directly
 ```cmd
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
+go build -o bin\term-rest-client.exe .\cmd\term-rest-client
 bin\term-rest-client.exe
 ```
 
@@ -37,7 +37,7 @@ chmod +x build.sh run.sh
 
 ### Option 2: Go Directly
 ```bash
-go build -o bin/term-rest-client cmd/term-rest-client/main.go
+go build -o bin/term-rest-client ./cmd/term-rest-client
 ./bin/term-rest-client
 ```
 
@@ -80,3 +80,17 @@ chmod +x build.sh run.sh
 For more details, see [docs/BUILD.md](docs/BUILD.md)
 
 
+
+## First Request
+
+1. Start the app. The sample workspace opens `Auth API / Login`.
+2. Press `Ctrl+R` (or `F5`) to send it. The response and test results appear on the right.
+3. Pick another request in the Collections tree with the arrow keys and `Enter`.
+4. Edit the URL or a tab, then press `Ctrl+S` to save. `Ctrl+N` starts a new request.
+5. Press `F1` at any time for the full list of shortcuts, `Ctrl+Q` to quit.
+
+Your collections are saved automatically. Run a saved request without the UI:
+
+```bash
+./bin/term-rest-client run "User Service/Get JSON"
+```

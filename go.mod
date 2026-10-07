@@ -1,4 +1,4 @@
-module term-rest-client
+module github.com/AbyAbyss/cli-rest-client
 
 go 1.24.0
 

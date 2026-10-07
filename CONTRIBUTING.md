@@ -54,11 +54,11 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ```bash
 # Clone your fork
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
 
 # Add upstream remote
-git remote add upstream https://github.com/originalowner/term-rest-client.git
+git remote add upstream https://github.com/AbyAbyss/cli-rest-client.git
 
 # Install dependencies
 go mod download

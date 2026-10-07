@@ -1,405 +1,221 @@
 # Term REST Client
 
-A beautiful, feature-rich terminal-based REST API client built with Go and [tview](https://github.com/rivo/tview). Test your APIs directly from the terminal with an intuitive, Postman-like interface.
+A terminal REST API client written in Go with [tview](https://github.com/rivo/tview). Build requests, organise them into collections, use variables, script simple pre-request steps and response tests, all without leaving the terminal. Saved requests can also be run from the command line, which makes them usable in CI.
 
-![Term REST Client](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
 
-## 📸 Screenshot
-
-![Term REST Client Screenshot](assets/screenshot.png)
-
-*Term REST Client in action: Building a PUT request, viewing collections, and displaying the response with headers and body.*
-
-## ✨ Features
-
-- 🎨 **Beautiful Terminal UI** - Modern, colorful interface built with tview
-- 🎭 **Multiple Themes** - Switch between Catppuccin Mocha and Original themes
-- 🖱️ **Mouse Support** - Click to focus and interact with UI elements
-- 📁 **Request Collections** - Organize requests into collections
-- 💾 **Save & Load** - Save requests to collections for quick access
-- ✏️ **Edit & Delete** - Rename collections/requests or delete them
-- 🚀 **Multiple HTTP Methods** - GET, POST, PUT, PATCH, DELETE
-- 📝 **JSON Body Editor** - Built-in JSON body editor with syntax highlighting
-- 📊 **Response Viewer** - View status, headers, and body with syntax highlighting
-- ⚡ **Fast & Lightweight** - Pure Go, no dependencies on external services
-- ⌨️ **Keyboard Shortcuts** - Full keyboard navigation support
-- ⚙️ **Settings Tab** - Customize theme and view application information
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Go 1.24 or higher
-- A terminal with 256-color support
-
-### Installation
-
-#### Windows
-
-**Option 1: Using Build Script (Recommended)**
-```cmd
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
-
-# Build using batch script
-build.bat
-
-# Run the application
-run.bat
+```
+┌────────── Collections ─────────┐┌─ Method ──┐╔═══════════ User Service / Create User ════════════╗
+│ ▾ Auth API (2)                 ││POST       │║ {{baseUrl}}/post                                  ║   SEND
+│ ├── GET    Login               │└───────────┘╚═══════════════════════════════════════════════════╝
+│ └── GET    Bearer Token        │ 1 Params   2 Auth   3 Headers   4 Body •   5 Pre-request   6 Tests •  ...
+│ ▾ User Service (6)             │Body type JSON                    ┌──────── Response · 200 ─────────┐
+│ ├── GET    Get JSON            │┌────────── Body · JSON ─────────┐│ POST https://httpbin.org/post   │
+│ ├── GET    Query Params        ││ {                              ││                                 │
+│ ├──●POST   Create User         ││   "name": "Aby",               ││ 200 OK   Time 412 ms   Size 1 KB│
+│ ├── PUT    Update User         ││   "role": "admin",             ││                                 │
+│ ├── POST   Form Login          ││   "createdAt": {{$timestamp}}  ││ Tests 2/2 passed                │
+│ └── DELETE Delete User         ││ }                              ││   ✓ status == 200               │
+│ ▾ Payment Gateway (1)          ││                                ││   ✓ json.json.name == Aby       │
+│ └── POST   Charge              ││                                ││   → lastUser = "Aby"            │
 ```
 
-**Option 2: Using PowerShell**
-```powershell
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
+## Features
 
-# Build
-.\build.ps1
+- **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, with a URL bar that autocompletes `{{variables}}`.
+- **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML or form-urlencoded bodies. Any line can be disabled by starting it with `#`.
+- **Variables**: `{{name}}` works in the URL, params, headers, auth fields and body. Built-ins: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`.
+- **Pre-request scripts**: `set name = value` / `unset name` before a request is sent.
+- **Tests**: one assertion per line (`status == 200`, `json.items[0].id exists`, `time < 500` ...), plus `set token = json.token` to capture values for the next request.
+- **Collections**: create, rename, duplicate, reorder and delete collections and requests. Everything is saved to a JSON file automatically.
+- **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
+- **Response viewer**: status, timing, size, sorted headers, pretty-printed and colour-highlighted JSON, test results. Press `s` to save the body to a file.
+- **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
+- **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
+- **Mouse support**: click any field or tab, scroll the response.
+- **Headless mode**: `term-rest-client run "Collection/Request"` sends saved requests, prints results and exits non-zero when a test fails.
 
-# Run
-.\bin\term-rest-client.exe
-```
+## Quick Start
 
-**Option 3: Using Go directly**
-```cmd
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
+You need Go 1.24 or newer and a terminal with 256-colour (ideally true-colour) support.
 
-# Build
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
-
-# Run
-bin\term-rest-client.exe
-```
-
-**Option 4: Using Make (if you have Make installed)**
-```cmd
-# Install Make for Windows: https://www.gnu.org/software/make/
-# Or use Chocolatey: choco install make
-
-make build
-make run
-```
-
-#### Linux / macOS
-
-**Option 1: Using Build Script**
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
-
-# Make script executable
-chmod +x build.sh
-
-# Build
-./build.sh
-
-# Run
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make build        # or ./build.sh, build.bat, .\build.ps1
 ./bin/term-rest-client
 ```
 
-**Option 2: Using Make**
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
-
-# Build
-make build
-
-# Run
-make run
-```
-
-**Option 3: Using Go directly**
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/term-rest-client.git
-cd term-rest-client
-
-# Build
-go build -o bin/term-rest-client cmd/term-rest-client/main.go
-
-# Run
-./bin/term-rest-client
-```
-
-### Using Go Install
+Or install it straight into `$GOPATH/bin`:
 
 ```bash
-go install github.com/yourusername/term-rest-client/cmd/term-rest-client@latest
+go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
 ```
 
-### Cross-Platform Building
+On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
 
-**Build for all platforms:**
+See [QUICKSTART.md](QUICKSTART.md), [docs/BUILD.md](docs/BUILD.md) and [docs/WINDOWS.md](docs/WINDOWS.md) for more build options.
+
+## Using the app
+
+The screen has four areas: the **Collections tree** on the left, the **request bar** (method, URL, SEND) at the top, the **request tabs** below it, and the **Response** pane on the right.
+
+| Tab | What it holds |
+|-----|---------------|
+| 1 Params | Query parameters, `key=value` per line. They are appended to whatever query string the URL already has. |
+| 2 Auth | No Auth, Basic Auth, Bearer Token, or API Key (sent as a header or a query parameter). |
+| 3 Headers | `Name: value` per line. |
+| 4 Body | Body type (None, JSON, Text, XML, Form) and the body text. `Content-Type` is set from the type unless you set it in Headers. Form bodies are `key=value` per line. |
+| 5 Pre-request | Script run before sending (see below). |
+| 6 Tests | Assertions run on the response (see below). |
+| 7 Variables | Workspace variables, `name=value` per line. Shared by all requests. |
+| 8 Settings | Theme, timeout, redirects, TLS verification, version, data file location and the keyboard reference. |
+
+Tabs that contain something show a marker, for example `Headers (2)` or `Tests •`. A `●` next to the request title means it has unsaved changes.
+
+### Keyboard shortcuts
+
+| Keys | Action |
+|------|--------|
+| `Ctrl+R`, `F5`, `Enter` in the URL field | Send the request (`Ctrl+Enter` also works in terminals that report it) |
+| `Esc` | Cancel a running request, otherwise jump to the Collections tree |
+| `Ctrl+S` | Save. The first save of a new request asks for a name and collection |
+| `Alt+S` | Save as a new request |
+| `Ctrl+N` | New empty request |
+| `Ctrl+P` | Pretty-print the JSON body |
+| `Ctrl+G`, `F4` | Show the request as a cURL command |
+| `Tab` / `Shift+Tab` | Move between fields |
+| `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
+| `F1`, `?` | Help |
+| `Ctrl+Q`, `Ctrl+C` | Quit |
+
+In the **Collections tree**:
+
+| Keys | Action |
+|------|--------|
+| `Enter`, `Space` | Open a request, or expand / collapse a collection |
+| `Left` / `Right` | Collapse / expand a collection |
+| `n` | New collection |
+| `a` (or `r`) | New request in the selected collection |
+| `e` (or `F2`) | Rename |
+| `c` | Duplicate |
+| `d` (or `Delete`) | Delete, after confirmation. Deleting a collection deletes its requests |
+| `Shift+Up` / `Shift+Down`, `K` / `J` | Move up / down |
+
+In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
+
+In dialogs: `Enter` confirms, `Tab` moves between fields, `Esc` cancels.
+
+### Variables
+
+Define variables in tab 7 as `name=value`, then use `{{name}}` anywhere in a request. The sample workspace defines `baseUrl` and `token`. Variables that can't be resolved are left as-is and listed as a warning above the response.
+
+### Pre-request scripts
+
+```
+# lines starting with # are comments
+set orderId = order-{{$randomInt}}
+set auth = Bearer {{token}}
+unset oldValue
+```
+
+`set` writes to the workspace variables, so the values show up in the Variables tab and stay available for later requests.
+
+### Tests
+
+One assertion per line. Each line is reported as passed (`✓`) or failed (`✗`) with the actual value.
+
+```
+status == 200
+status < 300
+time < 1000                       # milliseconds
+size > 0                          # body size in bytes
+header Content-Type contains json
+header X-Rate-Limit exists
+body contains "hello"
+json.data.items[0].id == 42
+json.data.items.length == 3
+json.user.name matches ^Ab
+json.error !exists
+set token = json.token            # capture a value into a variable
+```
+
+Subjects: `status`, `time`, `size`, `body`, `header <Name>`, `json.<path>`. Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `matches` (regular expression), `exists`, and the negations `!contains`, `!matches`, `!exists`. Numbers compare numerically (`1.50 == 1.5`), everything else as text. The expected value may use `{{variables}}`.
+
+## Command-line mode
+
 ```bash
-# Linux/macOS
-./build.sh all
-
-# Windows PowerShell
-.\build.ps1 all
-
-# Using Make (all platforms)
-make build-all
+term-rest-client list                                   # list saved requests
+term-rest-client run "User Service/Get JSON"            # one request
+term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
+term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-**Build for specific platform:**
-```bash
-# Windows
-make build-windows
+`run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-v` also prints response headers and bodies. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
 
-# Linux
-make build-linux
+## Where data is stored
 
-# macOS
-make build-darwin
-```
+Collections, variables, settings and unsaved edits live in one JSON file:
 
-## 📖 Usage
+| OS | Default location |
+|----|------------------|
+| Linux | `~/.config/term-rest-client/workspace.json` |
+| macOS | `~/Library/Application Support/term-rest-client/workspace.json` |
+| Windows | `%AppData%\term-rest-client\workspace.json` |
 
-### Basic Operations
+Use `-data path/to/file.json` or the `TERM_REST_CLIENT_DATA` environment variable to pick another file, for example one per project. The file is plain JSON, so it can be committed, shared or edited by hand. Settings shows the path in use.
 
-1. **Send a Request**
-   - Enter URL in the URL field
-   - Select HTTP method from dropdown
-   - (Optional) Add JSON body
-   - Press `Ctrl+Enter` or `Ctrl+S` or click `SEND` button
-
-2. **Navigate Collections**
-   - Use arrow keys or mouse to navigate the tree
-   - Click on a request to load it into the builder
-
-3. **Save a Request**
-   - Build your request
-   - Press `Ctrl+Shift+S` to save to current collection
-
-4. **Edit Names**
-   - Select a collection or request
-   - Press `e` to edit its name
-
-5. **Delete Items**
-   - Select a collection or request
-   - Press `Delete` or `d` to delete
-
-6. **Create Collection**
-   - Focus on the tree
-   - Press `n` to create a new collection
-
-7. **Change Theme**
-   - Press `8` to open the Settings tab
-   - Use the Theme dropdown to switch between available themes
-   - Changes apply immediately
-
-### Keyboard Shortcuts
-
-#### Navigation & Focus
-| Shortcut | Action | Context |
-|----------|--------|---------|
-| `Tab` | Move focus to next field | Anywhere |
-| `Shift+Tab` | Move focus to previous field | Anywhere |
-| `1-8` | Switch between tabs | Anywhere |
-| Arrow Keys | Navigate tree/collections | Collections tree focused |
-| `Enter` | Select/load request | Collections tree focused |
-
-#### Request Operations
-| Shortcut | Action | Context |
-|----------|--------|---------|
-| `Ctrl+Enter` | Send HTTP request | Builder tab |
-| `Ctrl+S` | Send HTTP request | Builder tab |
-| `Ctrl+Shift+S` | Save current request to collection | Builder tab |
-| `Enter` | Send request (when URL field focused) | URL input field |
-
-#### Collection & Request Management
-| Shortcut | Action | Context |
-|----------|--------|---------|
-| `n` | Create new collection | Collections tree focused |
-| `r` | Create new empty request | Collections tree focused |
-| `e` | Edit selected item name | Collections tree focused (item selected) |
-| `d` | Delete selected item | Collections tree focused (item selected) |
-| `Delete` | Delete selected item | Collections tree focused (item selected) |
-
-#### Application Control
-| Shortcut | Action | Context |
-|----------|--------|---------|
-| `Esc` | Quit application | Anywhere |
-| `Ctrl+Q` | Quit application | Anywhere |
-
-### Command Rules
-
-#### Creating Collections
-- **Method 1**: Focus the Collections tree (left panel) and press `n`
-  - A new collection named "New Collection" will be created
-  - You'll be prompted to rename it immediately
-  - Press `Enter` to confirm or `Esc` to cancel
-
-- **Method 2**: When saving a request with `Ctrl+Shift+S`, if no collection exists, one will be created automatically
-
-#### Creating Requests
-- **Method 1**: Focus the Collections tree, select a collection (or leave root selected), and press `r`
-  - Creates a new empty request with default GET method
-  - Loads it into the builder automatically
-  - You'll be prompted to rename it immediately
-
-- **Method 2**: Build your request in the builder, then press `Ctrl+Shift+S`
-  - Saves the current request to the selected collection
-  - If no collection is selected, saves to the first available collection
-  - If no collections exist, creates a new collection automatically
-
-#### Editing Items
-- Select any collection or request in the tree
-- Press `e` to edit its name
-- Enter the new name and press `Enter` to save, or `Esc` to cancel
-
-#### Deleting Items
-- Select any collection or request in the tree
-- Press `d` or `Delete` key
-- Confirm deletion in the modal dialog
-- **Note**: Deleting a collection will delete all requests within it
-
-#### Sending Requests
-- **Method 1**: Fill in URL, select method, add body (optional), then press `Ctrl+Enter` or `Ctrl+S`
-- **Method 2**: Fill in URL, select method, add body (optional), then click the `SEND` button
-- **Method 3**: When URL field is focused, press `Enter` to send
-
-#### Loading Saved Requests
-- Navigate to a saved request in the Collections tree
-- Press `Enter` or click on it
-- The request will be loaded into the builder with its method, URL, and body
-
-### Mouse Support
-
-- Click on any UI element to focus it
-- Click on tree nodes to select them
-- Click `SEND` button to send request
-
-## 🏗️ Project Structure
+## Project structure
 
 ```
-term-rest-client/
-├── cmd/
-│   └── term-rest-client/    # Main application entry point
+cli-rest-client/
+├── cmd/term-rest-client/   # entry point, flags, list/run commands dispatch
 ├── internal/
-│   ├── app/                 # Application logic
-│   ├── models/              # Data models
-│   └── ui/                  # UI components
-├── pkg/
-│   └── httpclient/         # HTTP client utilities
-├── docs/                    # Documentation
-│   ├── ARCHITECTURE.md      # Architecture overview
-│   └── BUILD.md             # Detailed build instructions
-├── build.bat                # Windows build script
-├── build.ps1                # Windows PowerShell build script
-├── build.sh                 # Linux/macOS build script
-├── run.bat                  # Windows run script
-├── run.sh                   # Linux/macOS run script
-├── Makefile                 # Build automation (all platforms)
-├── LICENSE                  # MIT License
-├── CONTRIBUTING.md          # Contribution guidelines
-├── CHANGELOG.md             # Version history
-└── README.md                # This file
+│   ├── cli/                # headless "list" and "run" commands
+│   ├── engine/             # builds http.Request from a saved request + variables, cURL export
+│   ├── models/             # workspace, collection and request types
+│   ├── script/             # pre-request and test script interpreter
+│   ├── storage/            # workspace file load/save, sample workspace
+│   ├── testutil/           # local httpbin clone used by tests
+│   ├── ui/                 # terminal UI (tview)
+│   └── vars/               # {{variable}} substitution
+├── pkg/httpclient/         # HTTP client with timing, redirects, TLS and cancel support
+└── docs/
 ```
 
-## 🛠️ Development
+More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-### Building from Source
+## Development
 
-**Windows:**
-```cmd
-# Install dependencies
-go mod download
-
-# Build
-build.bat
-# Or: make build
-
-# Run tests
-go test ./...
-# Or: make test
-
-# Format code
-go fmt ./...
-# Or: make fmt
-```
-
-**Linux/macOS:**
 ```bash
-# Install dependencies
-go mod download
-
-# Build
-./build.sh
-# Or: make build
-
-# Run tests
-make test
-
-# Format code
+make test     # go test ./...
+make vet
 make fmt
-
-# Lint code
-make lint
+make lint     # needs golangci-lint
 ```
 
-For detailed build instructions, see [docs/BUILD.md](docs/BUILD.md).
+The UI tests drive the real application through tcell's simulation screen (typing, tab switching, saving, sending to a local test server), so `go test ./...` covers the interface as well as the HTTP and scripting code.
 
-### Running Tests
+## Roadmap
 
-```bash
-go test ./...
-```
+- Request history
+- Multiple named environments
+- Import from Postman collections and cURL
+- OAuth 2.0 helpers
+- Proxy settings in the UI (the `HTTPS_PROXY` / `HTTP_PROXY` environment variables already work)
 
-### Code Style
+## Known limitations
 
-This project follows standard Go conventions. Please run `gofmt` and `golint` before submitting PRs.
+- `Ctrl+Enter` is only distinguishable from `Enter` in terminals with extended keyboard reporting. Use `Ctrl+R` or `F5` elsewhere.
+- Copying text uses your terminal's selection (usually `Shift` + drag while mouse support is on).
+- Response bodies over 50 MB are truncated; display is capped at 2 MB.
 
-## 🤝 Contributing
+## License
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+MIT, see [LICENSE](LICENSE).
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Acknowledgments
 
-## 📝 Roadmap
-
-- [ ] Request history
-- [ ] Environment variables
-- [ ] Authentication (Basic, Bearer, OAuth)
-- [ ] Custom headers
-- [ ] Query parameters editor
-- [ ] Response formatting (JSON, XML, etc.)
-- [ ] Export/Import collections
-- [ ] Request/Response timings
-- [ ] SSL certificate management
-- [ ] Proxy support
-
-## 🐛 Known Issues
-
-- Some terminals may not support full mouse functionality
-- Very long responses may cause performance issues
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [tview](https://github.com/rivo/tview) - Terminal UI library
-- [tcell](https://github.com/gdamore/tcell) - Terminal cell library
-
-## 📧 Contact
-
-For questions, suggestions, or bug reports, please open an issue on GitHub.
-
----
-
-Made with ❤️ using Go
-
+- [tview](https://github.com/rivo/tview), terminal UI library
+- [tcell](https://github.com/gdamore/tcell), terminal cell library

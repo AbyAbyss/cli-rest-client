@@ -23,7 +23,7 @@ build.bat
 
 **Using Go directly:**
 ```cmd
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
+go build -o bin\term-rest-client.exe .\cmd\term-rest-client
 ```
 
 ### Linux / macOS
@@ -36,7 +36,7 @@ chmod +x build.sh
 
 **Using Go directly:**
 ```bash
-go build -o bin/term-rest-client cmd/term-rest-client/main.go
+go build -o bin/term-rest-client ./cmd/term-rest-client
 ```
 
 ## Cross-Platform Building
@@ -85,16 +85,16 @@ You can manually build for any platform using Go's cross-compilation:
 
 ```bash
 # Windows
-GOOS=windows GOARCH=amd64 go build -o dist/term-rest-client-windows-amd64.exe cmd/term-rest-client/main.go
+GOOS=windows GOARCH=amd64 go build -o dist/term-rest-client-windows-amd64.exe ./cmd/term-rest-client
 
 # Linux
-GOOS=linux GOARCH=amd64 go build -o dist/term-rest-client-linux-amd64 cmd/term-rest-client/main.go
+GOOS=linux GOARCH=amd64 go build -o dist/term-rest-client-linux-amd64 ./cmd/term-rest-client
 
 # macOS Intel
-GOOS=darwin GOARCH=amd64 go build -o dist/term-rest-client-darwin-amd64 cmd/term-rest-client/main.go
+GOOS=darwin GOARCH=amd64 go build -o dist/term-rest-client-darwin-amd64 ./cmd/term-rest-client
 
 # macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o dist/term-rest-client-darwin-arm64 cmd/term-rest-client/main.go
+GOOS=darwin GOARCH=arm64 go build -o dist/term-rest-client-darwin-arm64 ./cmd/term-rest-client
 ```
 
 ## Using Make
@@ -154,7 +154,7 @@ For development, you can use:
 
 ```bash
 # Watch mode (requires additional tooling)
-go run cmd/term-rest-client/main.go
+go run ./cmd/term-rest-client
 
 # Or build and run
 make build && make run
@@ -171,7 +171,7 @@ BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
 
 # Build with version info
 go build -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME" \
-  -o bin/term-rest-client cmd/term-rest-client/main.go
+  -o bin/term-rest-client ./cmd/term-rest-client
 ```
 
 The Makefile handles this automatically when you use `make build`.

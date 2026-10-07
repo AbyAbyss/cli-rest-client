@@ -1,85 +1,109 @@
+// Package httpclient sends HTTP requests and captures timing and body data.
 package httpclient
 
 import (
+	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
-// Client wraps HTTP client functionality
+// MaxBodySize caps how much of a response body is read into memory.
+const MaxBodySize = 50 << 20 // 50 MiB
+
+// Options configures a Client.
+type Options struct {
+	// Timeout for the whole exchange. Zero means 30 seconds.
+	Timeout time.Duration
+	// DisableRedirects returns 3xx responses instead of following them.
+	DisableRedirects bool
+	// InsecureSkipVerify disables TLS certificate verification.
+	InsecureSkipVerify bool
+}
+
+// Client wraps an http.Client.
 type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient creates a new HTTP client with default timeout
-func NewClient(timeout time.Duration) *Client {
-	if timeout == 0 {
-		timeout = 30 * time.Second
+// NewClient creates a client from opts.
+func NewClient(opts Options) *Client {
+	if opts.Timeout <= 0 {
+		opts.Timeout = 30 * time.Second
 	}
-	return &Client{
-		httpClient: &http.Client{Timeout: timeout},
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if opts.InsecureSkipVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user opted in
 	}
+	c := &http.Client{Timeout: opts.Timeout, Transport: transport}
+	if opts.DisableRedirects {
+		c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
+	return &Client{httpClient: c}
 }
 
-// Response represents an HTTP response
+// Response is a fully read HTTP response.
 type Response struct {
 	StatusCode int
-	Status     string
+	Status     string // e.g. "200 OK"
+	Proto      string
 	Headers    http.Header
 	Body       []byte
-	Duration   time.Duration
+	// Truncated is true when the body was larger than MaxBodySize.
+	Truncated bool
+	Duration  time.Duration
+	// URL is the final URL after redirects.
+	URL string
 }
 
-// SendRequest sends an HTTP request and returns the response
-func (c *Client) SendRequest(method, url, body string) (*Response, error) {
+// StatusText returns the reason phrase without the numeric code ("OK").
+func (r *Response) StatusText() string {
+	prefix := fmt.Sprintf("%d ", r.StatusCode)
+	if len(r.Status) > len(prefix) && r.Status[:len(prefix)] == prefix {
+		return r.Status[len(prefix):]
+	}
+	if t := http.StatusText(r.StatusCode); t != "" {
+		return t
+	}
+	return r.Status
+}
+
+// Do sends req and reads the whole response body.
+func (c *Client) Do(ctx context.Context, req *http.Request) (*Response, error) {
 	start := time.Now()
-
-	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("error building request: %w", err)
-	}
-
-	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request error: %w", err)
+		if errors.Is(err, context.Canceled) {
+			return nil, context.Canceled
+		}
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodySize+1))
 	if err != nil {
-		return nil, fmt.Errorf("error reading response: %w", err)
+		if errors.Is(err, context.Canceled) {
+			return nil, context.Canceled
+		}
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+	truncated := false
+	if len(data) > MaxBodySize {
+		data = data[:MaxBodySize]
+		truncated = true
 	}
 
 	return &Response{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
+		Proto:      resp.Proto,
 		Headers:    resp.Header,
 		Body:       data,
+		Truncated:  truncated,
 		Duration:   time.Since(start),
+		URL:        resp.Request.URL.String(),
 	}, nil
-}
-
-// FormatResponse formats a response for display
-func FormatResponse(resp *Response) string {
-	var sb strings.Builder
-	// Use Catppuccin Mocha colors: success green for 2xx/3xx, red for errors
-	statusColor := "[#a6e3a1]" // Success green (Catppuccin Mocha)
-	if resp.StatusCode >= 400 {
-		statusColor = "[#f38ba8]" // Error red (Catppuccin Mocha)
-	}
-	sb.WriteString(fmt.Sprintf("[#cdd6f4]Status:%s %d %s  [#cdd6f4]Time: [#89b4fa]%.0fms[-]\n",
-		statusColor, resp.StatusCode, resp.Status, float64(resp.Duration.Milliseconds())))
-	sb.WriteString("[#89b4fa]--- Headers ---[#cdd6f4]\n")
-	for k, v := range resp.Headers {
-		sb.WriteString(fmt.Sprintf("%s: %s\n", k, strings.Join(v, ", ")))
-	}
-	sb.WriteString("\n[#89b4fa]--- Body ---[#cdd6f4]\n")
-	sb.Write(resp.Body)
-	return sb.String()
 }

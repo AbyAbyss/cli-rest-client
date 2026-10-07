@@ -17,7 +17,7 @@ function Build-Local {
     
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
-    go build -o "$BIN_DIR\$APP_NAME.exe" "$CMD_DIR/main.go"
+    go build -o "$BIN_DIR\$APP_NAME.exe" "./$CMD_DIR"
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Build complete: $BIN_DIR\$APP_NAME.exe" -ForegroundColor Green
@@ -38,7 +38,7 @@ function Build-Cross {
     $env:GOOS = $os
     $env:GOARCH = $arch
     $output = "$DIST_DIR\$APP_NAME-$os-$arch$ext"
-    go build -o $output "$CMD_DIR/main.go"
+    go build -o $output "./$CMD_DIR"
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  ✓ $output" -ForegroundColor Green
