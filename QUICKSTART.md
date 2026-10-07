@@ -1,5 +1,17 @@
 # Quick Start Guide
 
+## macOS: install the `term-rest-client` command
+
+```bash
+brew install go                 # if Go isn't installed yet
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make install                    # builds and puts it on your PATH
+term-rest-client                # run from any terminal
+```
+
+`make uninstall` removes it again. See the README for details.
+
 ## Windows
 
 ### Option 1: Batch Script (Easiest)

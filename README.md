@@ -40,22 +40,80 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 You need Go 1.24 or newer and a terminal with 256-colour (ideally true-colour) support.
 
+### macOS: install as a command you can run from any terminal
+
 ```bash
+# 1. Install Go (skip if `go version` already works)
+brew install go
+
+# 2. Get the code
 git clone https://github.com/AbyAbyss/cli-rest-client.git
 cd cli-rest-client
-make build        # or ./build.sh, build.bat, .\build.ps1
-./bin/term-rest-client
+
+# 3. Build the binary and put it on your PATH
+make install            # same as ./install.sh
 ```
 
-Or install it straight into `$GOPATH/bin`:
+Then open any terminal window and run:
+
+```bash
+term-rest-client                          # launch the REST client
+term-rest-client list                     # list saved requests
+term-rest-client run "Auth API/Login"     # send a saved request without the UI
+term-rest-client -version
+```
+
+`make install` picks the first of these it can write to: `/usr/local/bin`, `/opt/homebrew/bin` (Apple Silicon Homebrew), or `~/.local/bin`. If it ends up in a folder that isn't on your `PATH`, it prints the exact line to add to `~/.zshrc` (the default shell on macOS). For example:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Other install commands:
+
+| Command | What it does |
+|---------|--------------|
+| `make install` | Build with version info and install to your `PATH` |
+| `INSTALL_DIR=/usr/local/bin make install` | Install to a specific folder (asks for your password if it needs `sudo`) |
+| `make uninstall` | Remove the installed binary. Your collections are kept |
+| `git pull && make install` | Update to the latest version |
+| `make build` | Just build `./bin/term-rest-client` without installing |
+| `make build-mac-universal` | One binary for both Intel and Apple Silicon Macs, in `dist/` |
+
+Want a shorter command? Add an alias to `~/.zshrc`:
+
+```bash
+echo "alias rest='term-rest-client'" >> ~/.zshrc && source ~/.zshrc
+rest
+```
+
+### Linux
+
+The same `make install` / `./install.sh` works on Linux.
+
+### Windows
+
+```cmd
+build.bat
+bin\term-rest-client.exe
+```
+
+See [docs/WINDOWS.md](docs/WINDOWS.md) for PowerShell and other options.
+
+### With `go install`
 
 ```bash
 go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
 ```
 
+This puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`), which needs to be on your `PATH`.
+
+### First run
+
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
 
-See [QUICKSTART.md](QUICKSTART.md), [docs/BUILD.md](docs/BUILD.md) and [docs/WINDOWS.md](docs/WINDOWS.md) for more build options.
+See [QUICKSTART.md](QUICKSTART.md) and [docs/BUILD.md](docs/BUILD.md) for more build options.
 
 ## Using the app
 
@@ -181,6 +239,8 @@ cli-rest-client/
 │   ├── ui/                 # terminal UI (tview)
 │   └── vars/               # {{variable}} substitution
 ├── pkg/httpclient/         # HTTP client with timing, redirects, TLS and cancel support
+├── install.sh              # build and install to your PATH (macOS/Linux)
+├── Makefile                # make build / install / uninstall / test
 └── docs/
 ```
 
@@ -189,6 +249,7 @@ More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Development
 
 ```bash
+make install  # build and install to your PATH
 make test     # go test ./...
 make vet
 make fmt

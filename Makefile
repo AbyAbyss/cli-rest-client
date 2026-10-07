@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage vet clean fmt lint install deps update-deps build-all build-linux build-windows build-darwin help
+.PHONY: build run test test-coverage vet clean fmt lint install uninstall build-mac-universal deps update-deps build-all build-linux build-windows build-darwin help
 
 # Application name
 APP_NAME := term-rest-client
@@ -66,10 +66,18 @@ lint: ## Run linter
 		echo "golangci-lint not installed. Install it with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 	fi
 
-install: ## Install the application
-	@echo "Installing $(APP_NAME)..."
-	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(shell $(GOCMD) env GOPATH)/bin/$(APP_NAME)$(EXT) ./$(CMD_DIR)
-	@echo "Installed to $(shell $(GOCMD) env GOPATH)/bin/$(APP_NAME)$(EXT)"
+install: ## Build and install to your PATH (macOS/Linux; INSTALL_DIR=... to override)
+	@./install.sh install
+
+uninstall: ## Remove the installed binary
+	@./install.sh uninstall
+
+build-mac-universal: ## Build one macOS binary for Intel and Apple Silicon (needs macOS lipo)
+	@mkdir -p $(DIST_DIR)
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP_NAME)-darwin-amd64 ./$(CMD_DIR)
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP_NAME)-darwin-arm64 ./$(CMD_DIR)
+	lipo -create -output $(DIST_DIR)/$(APP_NAME)-darwin-universal $(DIST_DIR)/$(APP_NAME)-darwin-amd64 $(DIST_DIR)/$(APP_NAME)-darwin-arm64
+	@echo "Built $(DIST_DIR)/$(APP_NAME)-darwin-universal"
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
