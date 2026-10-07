@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Copy as cURL, JSON formatter, request cancellation, HEAD and OPTIONS methods.
 - Settings: Gruvbox Dark and Light themes, timeout, redirect following, TLS verification.
 - `install.sh` with `make install` / `make uninstall` to put the binary on your PATH
-  (macOS and Linux), and `make build-mac-universal`.
+  (macOS and Linux, with shell-specific PATH hints and a Go version check),
+  `make build-mac-universal`, and linux/arm64 builds.
 - Headless `list` and `run` commands with test-based exit codes, plus `-version`.
 - Test suite covering the engine, scripting, storage, CLI and the UI (simulated terminal).
 

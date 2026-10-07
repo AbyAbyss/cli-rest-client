@@ -12,6 +12,18 @@ term-rest-client                # run from any terminal
 
 `make uninstall` removes it again. See the README for details.
 
+## Linux: install the `term-rest-client` command
+
+```bash
+sudo apt install git make && sudo snap install go --classic   # Ubuntu/Debian; see README for other distros
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make install                    # installs to ~/.local/bin
+term-rest-client                # run from any terminal
+```
+
+If the command isn't found, open a new terminal or follow the PATH line the installer prints.
+
 ## Windows
 
 ### Option 1: Batch Script (Easiest)

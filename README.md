@@ -80,6 +80,7 @@ Other install commands:
 | `git pull && make install` | Update to the latest version |
 | `make build` | Just build `./bin/term-rest-client` without installing |
 | `make build-mac-universal` | One binary for both Intel and Apple Silicon Macs, in `dist/` |
+| `make build-linux` | Linux binaries for amd64 and arm64, in `dist/` |
 
 Want a shorter command? Add an alias to `~/.zshrc`:
 
@@ -88,9 +89,57 @@ echo "alias rest='term-rest-client'" >> ~/.zshrc && source ~/.zshrc
 rest
 ```
 
-### Linux
+### Linux: install as a command you can run from any terminal
 
-The same `make install` / `./install.sh` works on Linux.
+**1. Install the tools.** You need `git`, `make` and Go 1.21 or newer (Go downloads the 1.24 toolchain this project uses by itself). Distro Go packages are often older than that, so check with `go version` after installing.
+
+| Distro | Command |
+|--------|---------|
+| Ubuntu / Debian | `sudo apt install git make` then `sudo snap install go --classic` |
+| Fedora | `sudo dnf install git make golang` |
+| Arch / Manjaro | `sudo pacman -S git make go` |
+| openSUSE | `sudo zypper install git make go` |
+
+No snap, or the packaged Go is too old? Use the official release (swap `amd64` for `arm64` on ARM machines such as a Raspberry Pi):
+
+```bash
+curl -LO https://go.dev/dl/go1.24.7.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.7.linux-amd64.tar.gz
+echo 'export PATH="$PATH:/usr/local/go/bin"' >> ~/.bashrc && source ~/.bashrc
+go version
+```
+
+**2. Build and install.**
+
+```bash
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make install            # same as ./install.sh
+```
+
+On most Linux systems `/usr/local/bin` needs root, so the binary goes to `~/.local/bin` without asking for a password. Ubuntu, Debian and Fedora already put `~/.local/bin` on your `PATH` (you may need to open a new terminal, or log out and back in, the first time it's created). If it isn't on your `PATH`, the installer prints the line for your shell: `~/.bashrc` for bash, `~/.zshrc` for zsh, or `fish_add_path` for fish. For example:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+To install system-wide for all users instead (asks for your password once, for the copy):
+
+```bash
+INSTALL_DIR=/usr/local/bin make install
+```
+
+**3. Run it** from any terminal: `term-rest-client`. `make uninstall`, `git pull && make install` and the `rest` alias work exactly as on macOS (put the alias in `~/.bashrc` instead of `~/.zshrc` if you use bash).
+
+**Servers without Go.** Build on any machine and copy the binary over. It's a single static file with no dependencies:
+
+```bash
+make build-linux        # dist/term-rest-client-linux-amd64 and -linux-arm64
+scp dist/term-rest-client-linux-amd64 user@server:~/.local/bin/term-rest-client
+```
+
+Over SSH the UI works in any terminal; `term-rest-client run ...` is handy for scripted checks on servers.
 
 ### Windows
 

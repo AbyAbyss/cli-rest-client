@@ -37,6 +37,7 @@ function Build-Cross {
     
     $env:GOOS = $os
     $env:GOARCH = $arch
+    $env:CGO_ENABLED = "0"
     $output = "$DIST_DIR\$APP_NAME-$os-$arch$ext"
     go build -o $output "./$CMD_DIR"
     
@@ -51,6 +52,7 @@ function Build-All {
     Write-Host "Building for all platforms..." -ForegroundColor Yellow
     
     Build-Cross "linux" "amd64"
+    Build-Cross "linux" "arm64"
     Build-Cross "windows" "amd64" ".exe"
     Build-Cross "darwin" "amd64"
     Build-Cross "darwin" "arm64"

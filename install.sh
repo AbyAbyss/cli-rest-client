@@ -44,21 +44,60 @@ on_path() {
 
 path_hint() {
     local dir="$1" rc
-    case "${SHELL:-}" in
-        */zsh)  rc="$HOME/.zshrc" ;;
-        */bash) rc="$HOME/.bash_profile" ;;
-        *)      rc="your shell's startup file" ;;
-    esac
     echo
     echo "  $dir is not on your PATH yet. Add it with:"
     echo
+    case "${SHELL:-}" in
+        */fish)
+            echo "    fish_add_path $dir"
+            echo
+            return
+            ;;
+        */zsh)  rc="$HOME/.zshrc" ;;
+        */bash)
+            # macOS Terminal opens login shells (~/.bash_profile); Linux
+            # terminals open interactive shells (~/.bashrc).
+            if [ "$(uname -s)" = "Darwin" ]; then
+                rc="$HOME/.bash_profile"
+            else
+                rc="$HOME/.bashrc"
+            fi
+            ;;
+        *)      rc="$HOME/.profile" ;;
+    esac
     echo "    echo 'export PATH=\"$dir:\$PATH\"' >> $rc"
     echo "    source $rc"
     echo
 }
 
+go_hint() {
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo "Install it with: brew install go"
+    else
+        echo "Install it with: sudo snap install go --classic, or download from https://go.dev/dl/ (distro packages are often too old)"
+    fi
+}
+
+# check_go makes sure Go 1.21 or newer is available. Go 1.21+ downloads the
+# exact toolchain go.mod asks for (1.24) by itself; older versions can't.
+check_go() {
+    command -v go >/dev/null 2>&1 || fail "Go is not installed. $(go_hint)"
+    local v major minor
+    v="$(go env GOVERSION 2>/dev/null || true)"   # e.g. go1.22.5
+    v="${v#go}"
+    major="${v%%.*}"
+    minor="${v#*.}"
+    minor="${minor%%.*}"
+    case "$major$minor" in
+        ''|*[!0-9]*) return 0 ;; # unknown format (e.g. devel), let go build decide
+    esac
+    if [ "$major" -lt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -lt 21 ]; }; then
+        fail "Go $v is too old (need 1.21 or newer). $(go_hint)"
+    fi
+}
+
 install_app() {
-    command -v go >/dev/null 2>&1 || fail "Go is not installed. On macOS run: brew install go"
+    check_go
 
     local version build_time dir
     version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
