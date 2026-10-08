@@ -25,6 +25,7 @@ var helpSections = []helpSection{
 	{"Navigation", [][2]string{
 		{"Tab / Shift+Tab", "Move between fields"},
 		{"Alt+1 … Alt+8", "Switch tab (plain 1-8 works when not typing)"},
+		{"Alt+E", "Switch to the next environment (or use the Environment picker)"},
 		{"Esc", "Jump back to the collections tree"},
 		{"Mouse", "Click to focus, click a tab to open it, scroll to scroll"},
 	}},

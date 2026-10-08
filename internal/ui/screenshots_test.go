@@ -58,7 +58,8 @@ func TestScreenshots(t *testing.T) {
 
 	newApp := func(theme string) (*harness, *models.Workspace) {
 		ws := storage.SampleWorkspace()
-		ws.SetVariable("baseUrl", base)
+		ws.Environment("Local").Variables[0].Value = base
+		ws.SetActive("Local")
 		ws.Settings.Theme = theme
 		h := start(t, ws)
 		h.screen.SetSize(shotW, shotH)
@@ -159,6 +160,21 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "history", "Request history")
 	h.key(tcell.KeyRune, 'c', tcell.ModAlt)
 
+	// 6d. Environments in the Variables tab.
+	h.do(func() {
+		h.a.ws.Environments = append(h.a.ws.Environments, &models.Environment{Name: "Staging", Variables: []models.KeyValue{
+			{Key: "baseUrl", Value: "https://staging.api.example.com"},
+			{Key: "token", Value: "{{$uuid}}"},
+		}})
+		h.a.refreshEnvPicker()
+		h.a.editingEnv = "Local"
+		h.a.switchTab(6)
+		h.a.refreshVariablesTab()
+		h.a.tv.SetFocus(h.a.varsTarget)
+	})
+	writeShot(t, h, dir, "environments", "Environments")
+	h.do(func() { h.a.switchTab(0) })
+
 	// 7. Settings in another theme.
 	g, gws := newApp("Gruvbox Dark")
 	open(g, reqAt(t, gws, "User Service/Lookup/Get JSON"), 7)
@@ -173,7 +189,8 @@ func TestScreenshots(t *testing.T) {
 
 	// 9. Command-line mode.
 	cws := storage.SampleWorkspace()
-	cws.SetVariable("baseUrl", base)
+	cws.Environment("Local").Variables[0].Value = base
+	cws.SetActive("Local")
 	var out bytes.Buffer
 	cli.Run(&out, &out, cws, nil, []string{"User Service", "Payment Gateway"})
 	writeCLIShot(t, dir, "cli", `term-rest-client run "User Service" "Payment Gateway"`, out.String(), themes[0])

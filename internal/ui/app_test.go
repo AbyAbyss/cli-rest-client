@@ -227,7 +227,7 @@ func TestTabBarClick(t *testing.T) {
 func TestFocusCycle(t *testing.T) {
 	h := start(t, nil)
 	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
-	want := []tview.Primitive{h.a.methodDrop, h.a.urlInput, h.a.sendBtn, h.a.paramsArea, h.a.response, h.a.tree}
+	want := []tview.Primitive{h.a.methodDrop, h.a.urlInput, h.a.envDrop, h.a.sendBtn, h.a.paramsArea, h.a.response, h.a.tree}
 	for i, w := range want {
 		h.key(tcell.KeyTab, 0, 0)
 		if f := h.focus(); f != w {
@@ -903,4 +903,135 @@ func TestDayLabel(t *testing.T) {
 			t.Errorf("dayLabel(%v) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func TestEnvironmentsUI(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := storage.SampleWorkspace()
+	ws.Environment("httpbin.org").Variables[0].Value = srv.URL
+	ws.Environment("Local").Variables[0].Value = srv.URL
+	h := start(t, ws)
+	bearer := reqAt(t, ws, "Auth API/Bearer Token")
+
+	sendBearer := func() string {
+		h.do(func() { h.a.loadIntoBuilder(*bearer, bearer); h.a.result = nil; h.a.tv.SetFocus(h.a.urlInput) })
+		h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+		h.eventually("response", func() bool { return h.a.result != nil && h.a.result.resp != nil })
+		var auth string
+		h.do(func() { auth = h.a.result.reqHeaders.Get("Authorization") })
+		return auth
+	}
+
+	// The picker shows the active environment, and it is used for sending.
+	if s := h.screenText(); !strings.Contains(s, "Environment") || !strings.Contains(s, "httpbin.org") {
+		t.Fatalf("picker not shown:\n%s", s)
+	}
+	if got := sendBearer(); got != "Bearer my-secret-token" {
+		t.Fatalf("httpbin.org should use the global token, got %q", got)
+	}
+	if s := h.screenText(); !strings.Contains(s, "Environment: httpbin.org") {
+		t.Fatalf("response should name the environment:\n%s", s)
+	}
+
+	// Alt+E switches to Local, whose token overrides the global one.
+	h.key(tcell.KeyRune, 'e', tcell.ModAlt)
+	h.do(func() {
+		if h.a.ws.ActiveEnvironment != "Local" {
+			t.Fatalf("active = %q", h.a.ws.ActiveEnvironment)
+		}
+		if _, label := h.a.envDrop.GetCurrentOption(); label != "Local" {
+			t.Fatalf("picker shows %q", label)
+		}
+	})
+	if got := sendBearer(); got != "Bearer local-dev-token" {
+		t.Fatalf("Local should override token, got %q", got)
+	}
+	h.do(func() {
+		if h.a.history.Entries[0].Environment != "Local" || h.a.history.Entries[1].Environment != "httpbin.org" {
+			t.Fatal("history should record the environment")
+		}
+	})
+
+	// Picking "No Environment" in the dropdown leaves only globals: baseUrl is unresolved.
+	h.do(func() { h.a.envDrop.SetCurrentOption(0) })
+	h.do(func() {
+		if h.a.ws.Active() != nil {
+			t.Fatal("dropdown did not clear the environment")
+		}
+		h.a.loadIntoBuilder(*bearer, bearer)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("error", func() bool { return h.a.result != nil && h.a.result.err != nil })
+
+	// Variables tab: New environment, edit it, use it, rename, duplicate, delete.
+	h.key(tcell.KeyRune, '7', tcell.ModAlt)
+	h.do(func() {
+		h.a.envButtons[0].InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(p tview.Primitive) { h.a.tv.SetFocus(p) })
+	})
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("Staging") })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if h.a.ws.Environment("Staging") == nil || h.a.editingEnv != "Staging" || h.a.tv.GetFocus() != h.a.varsArea {
+			t.Fatalf("new env not created/edited: editing=%q focus=%T", h.a.editingEnv, h.a.tv.GetFocus())
+		}
+		h.a.varsArea.SetText("", false)
+	})
+	h.typeText("baseUrl=" + srv.URL)
+	h.do(func() {
+		vs := h.a.ws.Environment("Staging").Variables
+		if len(vs) != 1 || vs[0].Value != srv.URL {
+			t.Fatalf("edit not stored in the environment: %v", vs)
+		}
+		if len(h.a.ws.Variables) != 1 || h.a.ws.Variables[0].Key != "token" {
+			t.Fatal("globals must be untouched")
+		}
+		h.a.useEditedEnv()
+		if h.a.ws.ActiveEnvironment != "Staging" {
+			t.Fatal("Use it did not activate")
+		}
+		if _, label := h.a.envDrop.GetCurrentOption(); label != "Staging" {
+			t.Fatal("picker not updated")
+		}
+	})
+	if got := sendBearer(); got != "Bearer my-secret-token" {
+		t.Fatalf("Staging has no token, so the global should apply, got %q", got)
+	}
+
+	// Rename keeps it active; duplicate copies; delete the active one -> none.
+	h.do(func() { h.a.renameEnv() })
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("QA") })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if h.a.ws.ActiveEnvironment != "QA" || h.a.ws.Environment("Staging") != nil {
+			t.Fatal("rename")
+		}
+		h.a.duplicateEnv()
+		if h.a.ws.Environment("QA copy") == nil || h.a.editingEnv != "QA copy" {
+			t.Fatal("duplicate")
+		}
+		h.a.editingEnv = "QA"
+		h.a.deleteEnv()
+	})
+	h.key(tcell.KeyEnter, 0, 0) // confirm Delete
+	h.do(func() {
+		if h.a.ws.Environment("QA") != nil || h.a.ws.Active() != nil {
+			t.Fatal("delete of the active environment should leave none active")
+		}
+	})
+
+	// Everything is saved.
+	saved, _, err := h.store.Load()
+	if err != nil || saved.Environment("QA copy") == nil || saved.ActiveEnvironment != "" {
+		t.Fatalf("not persisted: %v", err)
+	}
+
+	// Globals can still be edited.
+	h.do(func() { h.a.varsTarget.SetCurrentOption(0) })
+	h.do(func() {
+		if h.a.editingEnv != "" || !strings.Contains(h.a.varsArea.GetText(), "token=my-secret-token") {
+			t.Fatalf("globals view: editing=%q text=%q", h.a.editingEnv, h.a.varsArea.GetText())
+		}
+	})
 }

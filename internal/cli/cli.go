@@ -60,8 +60,21 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	verbose := fs.Bool("v", false, "print response headers and body")
 	overrides := setFlags{}
 	fs.Var(overrides, "set", "override a variable for this run (name=value, repeatable)")
+	envName := fs.String("env", "", "environment to use for this run (default: the active one; \"none\" for globals only)")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	activeBefore := ws.ActiveEnvironment
+	if *envName != "" {
+		defer func() { ws.ActiveEnvironment = activeBefore }()
+		if strings.EqualFold(*envName, "none") {
+			ws.SetActive("")
+		} else if ws.Environment(*envName) == nil {
+			fmt.Fprintf(errOut, "run: no environment named %q (see the env command)\n", *envName)
+			return 2
+		} else {
+			ws.SetActive(*envName)
+		}
 	}
 	if fs.NArg() == 0 {
 		fmt.Fprintln(errOut, "run: name at least one request or folder, e.g. \"User Service/Lookup/Get JSON\" (see the list command)")
@@ -84,6 +97,9 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		InsecureSkipVerify: ws.Settings.InsecureSkipVerify,
 	})
 
+	if env := ws.Active(); env != nil {
+		fmt.Fprintf(out, "Environment: %s\n", env.Name)
+	}
 	failed := false
 	changed := false
 	for _, r := range targets {
@@ -152,7 +168,11 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	}
 
 	if changed && store != nil {
-		if err := store.Save(ws); err != nil {
+		// Captured values went into the environment used for the run, but
+		// the active selection is the user's: save with it unchanged.
+		saveWs := *ws
+		saveWs.ActiveEnvironment = activeBefore
+		if err := store.Save(&saveWs); err != nil {
 			fmt.Fprintf(errOut, "warning: could not save variables: %v\n", err)
 		}
 	}
@@ -243,6 +263,49 @@ func History(out, errOut io.Writer, store *storage.Store, args []string) int {
 			line += "  (" + e.Source + ")"
 		}
 		fmt.Fprintln(out, line)
+	}
+	return 0
+}
+
+// Env lists environments, or with a name switches the active one
+// ("none" for globals only).
+func Env(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args []string) int {
+	if len(args) == 0 {
+		if len(ws.Environments) == 0 {
+			fmt.Fprintln(out, "No environments. Create one in the app (Variables tab).")
+		}
+		for _, e := range ws.Environments {
+			mark := " "
+			if e == ws.Active() {
+				mark = "*"
+			}
+			fmt.Fprintf(out, "%s %s (%d variables)\n", mark, e.Name, len(e.Variables))
+		}
+		if ws.Active() == nil {
+			fmt.Fprintln(out, "* No Environment (globals only)")
+		}
+		return 0
+	}
+	name := strings.Join(args, " ")
+	switch {
+	case strings.EqualFold(name, "none"):
+		ws.SetActive("")
+	case ws.Environment(name) == nil:
+		fmt.Fprintf(errOut, "env: no environment named %q\n", name)
+		return 2
+	default:
+		ws.SetActive(name)
+	}
+	if store != nil {
+		if err := store.Save(ws); err != nil {
+			fmt.Fprintln(errOut, "env:", err)
+			return 1
+		}
+	}
+	if e := ws.Active(); e != nil {
+		fmt.Fprintf(out, "Active environment: %s\n", e.Name)
+	} else {
+		fmt.Fprintln(out, "Active environment: none (globals only)")
 	}
 	return 0
 }

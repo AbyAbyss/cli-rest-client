@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Environments, like Postman: named variable sets layered over Globals. Environment
+  picker next to the URL and `Alt+E` to switch; the Variables tab edits Globals or any
+  environment and can create, rename, duplicate, delete and activate them. The response
+  pane and History show which environment was used. CLI: `run -env NAME` and
+  `env [NAME|none]`. Sample workspace has httpbin.org and Local environments.
 - Request history, like Postman: a History view in the sidebar (Alt+H / Alt+C / F3,
   or click), grouped by day. Open an entry to get the request back with the response
   it got, save it to a collection, filter, delete, or clear all. Stored in

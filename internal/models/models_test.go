@@ -135,3 +135,57 @@ func TestHistoryAdd(t *testing.T) {
 		t.Fatal("remove failed")
 	}
 }
+
+func TestEnvironments(t *testing.T) {
+	w := &Workspace{
+		Variables: []KeyValue{{Key: "token", Value: "global-token"}, {Key: "baseUrl", Value: "http://global"}},
+		Environments: []*Environment{
+			{Name: "Local", Variables: []KeyValue{{Key: "baseUrl", Value: "http://localhost"}, {Key: "off", Value: "x", Disabled: true}}},
+			{Name: "Prod", Variables: []KeyValue{{Key: "baseUrl", Value: "https://prod"}}},
+		},
+	}
+	if got := w.VariableMap()["baseUrl"]; got != "http://global" {
+		t.Fatalf("no env: %s", got)
+	}
+	w.SetActive("local")
+	if w.ActiveEnvironment != "Local" {
+		t.Fatalf("SetActive should be case-insensitive and store the real name: %q", w.ActiveEnvironment)
+	}
+	m := w.VariableMap()
+	if m["baseUrl"] != "http://localhost" || m["token"] != "global-token" || m["off"] != "" {
+		t.Fatalf("env should override globals: %v", m)
+	}
+	if w.VariableSource("baseUrl") != "Local" || w.VariableSource("token") != "Globals" || w.VariableSource("nope") != "" {
+		t.Fatal("VariableSource")
+	}
+
+	// set updates where the variable lives; new ones go to the active env.
+	w.SetVariable("token", "t2")
+	w.SetVariable("baseUrl", "http://127.0.0.1")
+	w.SetVariable("fresh", "1")
+	if w.Variables[0].Value != "t2" || w.Environments[0].Variables[0].Value != "http://127.0.0.1" || !hasKey(w.Environments[0].Variables, "fresh") || hasKey(w.Variables, "fresh") {
+		t.Fatalf("SetVariable placement wrong: globals %v env %v", w.Variables, w.Environments[0].Variables)
+	}
+	w.UnsetVariable("baseUrl") // removes the env value, the global shows through again
+	if w.VariableMap()["baseUrl"] != "http://global" {
+		t.Fatal("UnsetVariable should remove from the env first")
+	}
+
+	w.SetActive("missing")
+	if w.Active() != nil || w.ActiveEnvironment != "" {
+		t.Fatal("unknown env should mean none")
+	}
+	w.SetVariable("new", "g")
+	if !hasKey(w.Variables, "new") {
+		t.Fatal("with no env, new variables are global")
+	}
+	if w.UniqueEnvName("Local") != "Local 2" || w.UniqueEnvName("QA") != "QA" {
+		t.Fatal("UniqueEnvName")
+	}
+
+	w.ActiveEnvironment = "Gone"
+	w.Normalize()
+	if w.ActiveEnvironment != "" {
+		t.Fatal("Normalize should drop a dangling active environment")
+	}
+}

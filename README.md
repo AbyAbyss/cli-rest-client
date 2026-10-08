@@ -11,6 +11,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 - **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, with a URL bar that autocompletes `{{variables}}`.
 - **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML or form-urlencoded bodies. Any line can be disabled by starting it with `#`.
+- **Environments, like Postman**: named variable sets such as Local, Staging and Production. Pick one from the Environment selector next to the URL (or `Alt+E`); its values override Globals. Create, rename, duplicate and delete them in the Variables tab.
 - **Variables**: `{{name}}` works in the URL, params, headers, auth fields and body. Built-ins: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`.
 - **Pre-request scripts**: `set name = value` / `unset name` before a request is sent.
 - **Tests**: one assertion per line (`status == 200`, `json.items[0].id exists`, `time < 500` ...), plus `set token = json.token` to capture values for the next request.
@@ -180,7 +181,7 @@ The screen has four areas: the **Collections tree** on the left, the **request b
 | 4 Body | Body type (None, JSON, Text, XML, Form) and the body text. `Content-Type` is set from the type unless you set it in Headers. Form bodies are `key=value` per line. |
 | 5 Pre-request | Script run before sending (see below). |
 | 6 Tests | Assertions run on the response (see below). |
-| 7 Variables | Workspace variables, `name=value` per line. Shared by all requests. |
+| 7 Variables | Globals and environments, `name=value` per line. Create, rename, duplicate, delete and activate environments here |
 | 8 Settings | Theme, timeout, redirects, TLS verification, version, data file location and the keyboard reference. |
 
 Tabs that contain something show a marker, for example `Headers (2)` or `Tests •`. A `●` next to the request title means it has unsaved changes.
@@ -198,6 +199,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Ctrl+G`, `F4` | Show the request as a cURL command |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
+| `Alt+E` | Switch to the next environment (No Environment → each environment → back) |
 | `F1`, `?` | Help |
 | `Ctrl+Q`, `Ctrl+C` | Quit |
 
@@ -288,9 +290,30 @@ Press the key while the response pane has focus, or click the section heading. R
 
 In dialogs: `Enter` confirms, `Tab` moves between fields, `Esc` cancels.
 
-### Variables
+### Environments and variables
 
-Define variables in tab 7 as `name=value`, then use `{{name}}` anywhere in a request. The sample workspace defines `baseUrl` and `token`. Variables that can't be resolved are left as-is and listed as a warning above the response.
+Variables work like Postman's:
+
+- **Globals** are available in every request.
+- **Environments** are named sets (Local, Staging, Production, ...). One can be active at a time, and its values override Globals with the same name. Pick it in the **Environment** selector next to the URL, or press `Alt+E` to step through them. "No Environment" uses Globals only.
+
+Use any variable as `{{name}}` in the URL, params, headers, auth fields or body.
+
+Manage them in tab **7 Variables**:
+
+| Control | What it does |
+|---------|--------------|
+| **Editing** dropdown | Choose what the text box edits: Globals or one of the environments (the active one is marked) |
+| Text box | `name=value` per line; `#` disables a line |
+| **New** | Create an environment |
+| **Rename** / **Duplicate** / **Delete** | Act on the environment being edited. Deleting the active one switches to No Environment |
+| **Use it** | Make the environment being edited the active one |
+
+The sample workspace has a global `token` and two environments: **httpbin.org** (`baseUrl=https://httpbin.org`) and **Local** (`baseUrl=http://localhost:8080` and its own `token`). Switching between them sends the same requests to a different server.
+
+The response pane shows which environment a request used, and History remembers it. If a `{{variable}}` can't be resolved it is left as-is and a warning says where the app looked (for example "not set in Local or Globals").
+
+![Environments](assets/screenshots/environments.png)
 
 ### Pre-request scripts
 
@@ -301,7 +324,7 @@ set auth = Bearer {{token}}
 unset oldValue
 ```
 
-`set` writes to the workspace variables, so the values show up in the Variables tab and stay available for later requests.
+`set` updates the variable where it already lives (the active environment first, then Globals). A new variable goes into the active environment, or into Globals when no environment is active. Changes show up in the Variables tab and stay available for later requests.
 
 ### Tests
 
@@ -332,11 +355,14 @@ term-rest-client run "User Service/Lookup/Get JSON"     # one request, by its fu
 term-rest-client run "User Service/Users"               # everything in a folder, sub-folders included
 term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
 term-rest-client run "Health Check"                     # a top-level request
+term-rest-client run -env Local "User Service"          # use a different environment for this run
+term-rest-client env                                    # list environments (* marks the active one)
+term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it).
 
 ## Where data is stored
 

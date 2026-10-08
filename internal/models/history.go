@@ -24,6 +24,8 @@ type HistoryEntry struct {
 	Request Request `json:"request"`
 	// Source is the path of the saved request it was sent from, if any.
 	Source string `json:"source,omitempty"`
+	// Environment is the environment that was active ("" = none).
+	Environment string `json:"environment,omitempty"`
 
 	// What was sent, with variables resolved.
 	Method         string              `json:"method"`

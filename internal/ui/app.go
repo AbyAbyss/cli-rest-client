@@ -56,6 +56,7 @@ type App struct {
 	historyFilter    string
 	historyCollapsed map[string]bool
 	methodDrop       *tview.DropDown
+	envDrop          *tview.DropDown
 	urlInput         *tview.InputField
 	sendBtn          *tview.Button
 	tabBar           *tview.TextView
@@ -68,6 +69,9 @@ type App struct {
 
 	// Tab editors.
 	paramsArea, headersArea, bodyArea, preArea, testsArea, varsArea *tview.TextArea
+	varsTarget                                                      *tview.DropDown
+	envButtons                                                      []*tview.Button
+	editingEnv                                                      string
 	bodyType                                                        *tview.DropDown
 	authType, authIn                                                *tview.DropDown
 	authUser, authPass, authToken, authKey, authValue               *tview.InputField
@@ -126,6 +130,7 @@ func New(ws *models.Workspace, store *storage.Store, info BuildInfo) *App {
 	a.setGlobalStyles()
 	a.build()
 	a.restoreDraft()
+	a.refreshEnvPicker()
 	a.applyTheme()
 	a.rebuildTree(a.linked)
 	a.renderResponse()
@@ -149,6 +154,7 @@ func (a *App) Run() error {
 func (a *App) build() {
 	a.buildTree()
 	a.buildRequestBar()
+	a.buildEnvPicker()
 	a.buildTabs()
 	a.buildResponse()
 	a.buildStatusBar()
@@ -161,6 +167,7 @@ func (a *App) build() {
 		AddItem(tview.NewFlex().
 			AddItem(a.methodDrop, 13, 0, false).
 			AddItem(a.urlInput, 0, 1, true).
+			AddItem(a.envDrop, 22, 0, false).
 			AddItem(a.sendBtn, 10, 0, false), 3, 0, true).
 		AddItem(a.tabBar, 1, 0, false).
 		AddItem(a.contentRow, 0, 1, false)
@@ -215,7 +222,7 @@ func (a *App) unfocusable(p interface {
 
 // focusables is the Tab-key cycle for the current tab.
 func (a *App) focusables() []tview.Primitive {
-	fs := []tview.Primitive{a.sidebar(), a.methodDrop, a.urlInput, a.sendBtn}
+	fs := []tview.Primitive{a.sidebar(), a.methodDrop, a.urlInput, a.envDrop, a.sendBtn}
 	fs = append(fs, a.tabs[a.activeTab].focus()...)
 	if !a.tabs[a.activeTab].wide {
 		fs = append(fs, a.response)
@@ -320,6 +327,9 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'c' || ev.Rune() == 'C'):
 		a.showSidebar(sideCollections, true)
+		return nil
+	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'e' || ev.Rune() == 'E'):
+		a.cycleEnv()
 		return nil
 	case key == tcell.KeyCtrlN:
 		a.newRequest()

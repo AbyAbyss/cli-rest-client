@@ -186,10 +186,17 @@ func SampleWorkspace() *models.Workspace {
 		},
 		Requests: []*models.Request{health},
 		Variables: []models.KeyValue{
-			{Key: "baseUrl", Value: "https://httpbin.org"},
 			{Key: "token", Value: "my-secret-token"},
 		},
-		Settings: models.Settings{Theme: "Catppuccin Mocha", TimeoutSeconds: 30},
+		Environments: []*models.Environment{
+			{Name: "httpbin.org", Variables: []models.KeyValue{{Key: "baseUrl", Value: "https://httpbin.org"}}},
+			{Name: "Local", Variables: []models.KeyValue{
+				{Key: "baseUrl", Value: "http://localhost:8080"},
+				{Key: "token", Value: "local-dev-token"},
+			}},
+		},
+		ActiveEnvironment: "httpbin.org",
+		Settings:          models.Settings{Theme: "Catppuccin Mocha", TimeoutSeconds: 30},
 	}
 	ws.Normalize()
 	return ws

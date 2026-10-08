@@ -29,6 +29,7 @@ type sendResult struct {
 	request     models.Request // as edited, for history
 	source      string         // path of the saved request, if any
 	fromHistory *models.HistoryEntry
+	env         string // active environment when sent ("" = none)
 	resp        *httpclient.Response
 	err         error
 	cancelled   bool
@@ -183,6 +184,7 @@ func (a *App) send() {
 		reqHeaders: prepared.SentHeaders(),
 		request:    req,
 		source:     a.linkedPath(),
+		env:        a.ws.ActiveEnvironment,
 	}
 	a.result = res
 	a.renderResponse()
@@ -313,9 +315,18 @@ func (a *App) renderResponse() {
 
 	if res.url != "" {
 		line("[%s::b]%s[-:-:-] [%s]%s", t.methodColor(res.method), esc(res.method), t.HexMuted, esc(res.url))
+		envLabel := "No Environment"
+		if res.env != "" {
+			envLabel = res.env
+		}
+		line("[%s]Environment: [%s]%s", t.HexMuted, t.HexInfo, esc(envLabel))
 	}
 	for _, m := range res.missing {
-		line("[%s]! Unresolved variable {{%s}}", t.HexWarning, esc(m))
+		where := "Globals"
+		if res.env != "" {
+			where = res.env + " or Globals"
+		}
+		line("[%s]! Unresolved variable {{%s}} (not set in %s)", t.HexWarning, esc(m), esc(where))
 	}
 	for _, w := range res.warnings {
 		line("[%s]! %s", t.HexWarning, esc(w))

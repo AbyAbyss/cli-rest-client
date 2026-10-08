@@ -118,6 +118,7 @@ func (a *App) recordHistory(res *sendResult) {
 		Time:           res.started,
 		Request:        res.request,
 		Source:         res.source,
+		Environment:    res.env,
 		Method:         res.method,
 		URL:            res.url,
 		RequestHeaders: res.reqHeaders,
@@ -171,6 +172,7 @@ func resultFromHistory(e *models.HistoryEntry) *sendResult {
 		request:     e.Request,
 		source:      e.Source,
 		fromHistory: e,
+		env:         e.Environment,
 	}
 	if e.Error != "" {
 		res.err = errors.New(e.Error)
@@ -238,6 +240,9 @@ func describeHistory(e *models.HistoryEntry) string {
 	} else {
 		parts = append(parts, strings.TrimSpace(strconv.Itoa(e.Status)+" "+e.StatusText), fmt.Sprintf("%d ms", e.DurationMs))
 	}
+	if e.Environment != "" {
+		parts = append(parts, "env "+e.Environment)
+	}
 	if e.Source != "" {
 		parts = append(parts, "from "+e.Source)
 	}
@@ -248,7 +253,7 @@ func (a *App) historyMatches(e *models.HistoryEntry) bool {
 	if a.historyFilter == "" {
 		return true
 	}
-	hay := strings.ToLower(strings.Join([]string{e.Method, e.URL, strconv.Itoa(e.Status), e.Source, e.Request.Name, e.Error}, " "))
+	hay := strings.ToLower(strings.Join([]string{e.Method, e.URL, strconv.Itoa(e.Status), e.Source, e.Request.Name, e.Error, e.Environment}, " "))
 	return strings.Contains(hay, strings.ToLower(a.historyFilter))
 }
 

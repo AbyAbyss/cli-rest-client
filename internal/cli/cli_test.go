@@ -110,3 +110,62 @@ func TestHistoryCommand(t *testing.T) {
 		t.Fatalf("all: %s", out.String())
 	}
 }
+
+func TestEnvSelection(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := storage.SampleWorkspace()
+	ws.Environment("Local").Variables[0].Value = srv.URL // Local's baseUrl -> test server
+	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
+
+	var out, errOut bytes.Buffer
+	// -env Local for one run: uses Local's token, captures go into Local,
+	// and the active environment stays httpbin.org.
+	code := Run(&out, &errOut, ws, store, []string{"-v", "-env", "local", "Auth API/Bearer Token", "User Service/Users/Create User"})
+	if code != 0 || !strings.Contains(out.String(), "Environment: Local") || !strings.Contains(out.String(), "> Authorization: Bearer local-dev-token") {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	if ws.ActiveEnvironment != "httpbin.org" {
+		t.Fatalf("active env changed to %q", ws.ActiveEnvironment)
+	}
+	saved, _, _ := store.Load()
+	if saved.ActiveEnvironment != "httpbin.org" {
+		t.Fatalf("saved active env %q", saved.ActiveEnvironment)
+	}
+	if !hasVar(saved.Environment("Local").Variables, "lastUser") || hasVar(saved.Variables, "lastUser") {
+		t.Fatal("captured variable should go into the environment used")
+	}
+	if code := Run(&out, &errOut, ws, nil, []string{"-env", "Staging", "Health Check"}); code != 2 {
+		t.Fatalf("unknown env should be a usage error, got %d", code)
+	}
+
+	// env lists and switches.
+	out.Reset()
+	Env(&out, &errOut, ws, store, nil)
+	if !strings.Contains(out.String(), "* httpbin.org") || !strings.Contains(out.String(), "  Local (") {
+		t.Fatalf("list:\n%s", out.String())
+	}
+	out.Reset()
+	if Env(&out, &errOut, ws, store, []string{"Local"}) != 0 || ws.ActiveEnvironment != "Local" {
+		t.Fatal("switch failed")
+	}
+	if saved, _, _ := store.Load(); saved.ActiveEnvironment != "Local" {
+		t.Fatal("switch not saved")
+	}
+	Env(&out, &errOut, ws, store, []string{"none"})
+	if ws.Active() != nil {
+		t.Fatal("none should clear the environment")
+	}
+	if Env(&out, &errOut, ws, store, []string{"Nope"}) != 2 {
+		t.Fatal("unknown env should fail")
+	}
+}
+
+func hasVar(kvs []models.KeyValue, key string) bool {
+	for _, kv := range kvs {
+		if kv.Key == key {
+			return true
+		}
+	}
+	return false
+}

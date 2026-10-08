@@ -31,8 +31,9 @@ func run(args []string) int {
 		fmt.Fprintf(out, "Usage:\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE]                 start the interactive UI\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] list            list saved requests\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-set name=value]... <Collection/Request>...\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
 		fmt.Fprintf(out, "                                                send saved requests and run their tests\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] env [NAME|none] list environments, or switch the active one\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
@@ -70,6 +71,8 @@ func run(args []string) int {
 			return cli.List(os.Stdout, ws)
 		case "run":
 			return cli.Run(os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "env":
+			return cli.Env(os.Stdout, os.Stderr, ws, store, rest[1:])
 		case "history":
 			return cli.History(os.Stdout, os.Stderr, store, rest[1:])
 		case "help":

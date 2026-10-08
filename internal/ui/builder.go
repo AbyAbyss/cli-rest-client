@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -131,11 +132,10 @@ func (a *App) variableCompletions(text string) []string {
 	prefix := text[open+2:]
 	var out []string
 	names := append([]string{}, vars.Dynamic...)
-	for _, kv := range a.ws.Variables {
-		if !kv.Disabled && kv.Key != "" {
-			names = append(names, kv.Key)
-		}
+	for k := range a.ws.VariableMap() {
+		names = append(names, k)
 	}
+	sort.Strings(names[len(vars.Dynamic):])
 	for _, n := range names {
 		if strings.HasPrefix(strings.ToLower(n), strings.ToLower(prefix)) {
 			out = append(out, text[:open]+"{{"+n+"}}")
@@ -409,32 +409,6 @@ func (a *App) buildTestsTab() *tab {
 				"set var = <subject> captures a value")
 		}), 3, 0, false)
 	return &tab{name: "Tests", page: page, focus: func() []tview.Primitive { return []tview.Primitive{a.testsArea} }}
-}
-
-func (a *App) buildVariablesTab() *tab {
-	a.varsArea = a.newArea("Variables", "# example:\n# baseUrl=https://httpbin.org\n# token=secret")
-	a.varsArea.SetChangedFunc(func() {
-		if a.loading {
-			return
-		}
-		a.ws.Variables = models.ParseKV(a.varsArea.GetText(), "=")
-	})
-	a.varsArea.SetBlurFunc(func() { a.persist() })
-	page := a.newFlex(tview.FlexRow).
-		AddItem(a.varsArea, 0, 1, false).
-		AddItem(a.newHint(func(t *Theme) string {
-			return hintLine(t, "name=value per line, use as {{name}} anywhere",
-				"Built-in: {{$uuid}} {{$timestamp}} {{$isoTimestamp}} {{$randomInt}}",
-				"Shared by all requests, saved automatically")
-		}), 2, 0, false)
-	return &tab{name: "Variables", page: page, focus: func() []tview.Primitive { return []tview.Primitive{a.varsArea} }}
-}
-
-func (a *App) refreshVariablesArea() {
-	prev := a.loading
-	a.loading = true
-	a.varsArea.SetText(models.FormatKV(a.ws.Variables, "="), false)
-	a.loading = prev
 }
 
 func (a *App) buildSettingsTab() *tab {
