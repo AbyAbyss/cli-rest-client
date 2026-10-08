@@ -138,6 +138,8 @@ type Settings struct {
 	// CollapsedSections remembers which response pane sections are folded
 	// ("tests", "request_headers", "response_headers", "body").
 	CollapsedSections map[string]bool `json:"collapsed_sections,omitempty"`
+	// DisableHistory stops recording sent requests.
+	DisableHistory bool `json:"disable_history,omitempty"`
 }
 
 // Draft is the unsaved builder state, restored on the next start.

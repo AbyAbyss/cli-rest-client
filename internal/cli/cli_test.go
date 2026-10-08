@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/internal/testutil"
 )
@@ -84,5 +86,27 @@ func TestListPaths(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list missing %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestHistoryCommand(t *testing.T) {
+	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
+	var out, errOut bytes.Buffer
+	if History(&out, &errOut, store, nil) != 0 || !strings.Contains(out.String(), "No history yet") {
+		t.Fatalf("empty: %s", out.String())
+	}
+	h := &models.History{}
+	h.Add(&models.HistoryEntry{Time: time.Now(), Method: "GET", URL: "http://a/1", Status: 200, DurationMs: 5, Source: "C / R"})
+	h.Add(&models.HistoryEntry{Time: time.Now(), Method: "POST", URL: "http://a/2", Error: "refused"})
+	store.SaveHistory(h)
+	out.Reset()
+	History(&out, &errOut, store, []string{"-n", "1"})
+	if !strings.Contains(out.String(), "POST    ERR") || strings.Contains(out.String(), "http://a/1") {
+		t.Fatalf("-n 1: %s", out.String())
+	}
+	out.Reset()
+	History(&out, &errOut, store, nil)
+	if !strings.Contains(out.String(), "GET     200      5 ms  http://a/1  (C / R)") {
+		t.Fatalf("all: %s", out.String())
 	}
 }

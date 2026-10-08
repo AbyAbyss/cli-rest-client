@@ -68,3 +68,27 @@ func TestDefaultPathEnv(t *testing.T) {
 		t.Fatalf("got %s", p)
 	}
 }
+
+func TestHistoryRoundTrip(t *testing.T) {
+	s := &Store{Path: filepath.Join(t.TempDir(), "proj.json")}
+	if s.HistoryPath() != filepath.Join(filepath.Dir(s.Path), "proj.history.json") {
+		t.Fatalf("history path %s", s.HistoryPath())
+	}
+	h, err := s.LoadHistory()
+	if err != nil || len(h.Entries) != 0 {
+		t.Fatalf("missing file should be empty history: %v", err)
+	}
+	r := models.NewRequest("x")
+	h.Add(&models.HistoryEntry{Request: r, Method: "GET", URL: "http://a", Status: 200, Body: []byte("hi")})
+	if err := s.SaveHistory(h); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadHistory()
+	if err != nil || len(got.Entries) != 1 || string(got.Entries[0].Body) != "hi" || got.Entries[0].Status != 200 {
+		t.Fatalf("round trip: %+v %v", got, err)
+	}
+	os.WriteFile(s.HistoryPath(), []byte("{bad"), 0o644)
+	if h, err := s.LoadHistory(); err == nil || h == nil {
+		t.Fatal("corrupt history should report an error and still return an empty history")
+	}
+}

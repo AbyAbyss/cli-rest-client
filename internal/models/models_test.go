@@ -116,3 +116,22 @@ func TestMigrateV1Draft(t *testing.T) {
 		t.Fatalf("unlinked draft migrated wrong: %+v", w.Draft)
 	}
 }
+
+func TestHistoryAdd(t *testing.T) {
+	h := &History{}
+	for i := 0; i < HistoryLimit+5; i++ {
+		h.Add(&HistoryEntry{URL: string(rune('a' + i%26))})
+	}
+	if len(h.Entries) != HistoryLimit {
+		t.Fatalf("len %d", len(h.Entries))
+	}
+	big := &HistoryEntry{Body: make([]byte, HistoryBodyLimit+10)}
+	h.Add(big)
+	if h.Entries[0] != big || len(big.Body) != HistoryBodyLimit || !big.BodyTruncated || big.BodySize != HistoryBodyLimit+10 {
+		t.Fatalf("newest first / body cap failed: %d %v %d", len(big.Body), big.BodyTruncated, big.BodySize)
+	}
+	h.Remove(big)
+	if h.Entries[0] == big || len(h.Entries) != HistoryLimit-1 {
+		t.Fatal("remove failed")
+	}
+}

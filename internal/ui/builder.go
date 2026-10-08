@@ -105,7 +105,7 @@ func (a *App) buildRequestBar() {
 		case tcell.KeyEnter:
 			a.send()
 		case tcell.KeyEscape:
-			a.tv.SetFocus(a.tree)
+			a.tv.SetFocus(a.sidebar())
 		}
 	})
 	a.urlInput.SetAutocompleteFunc(a.variableCompletions)
@@ -476,17 +476,27 @@ func (a *App) buildSettingsTab() *tab {
 			a.setStatus(levelWarning, "TLS certificate verification is off")
 		}
 	})
-	a.themed = append(a.themed, a.redirectsBox, a.insecureBox)
+	historyBox := tview.NewCheckbox().SetLabel("Record history     ").SetChecked(!s.DisableHistory)
+	historyBox.SetChangedFunc(func(checked bool) {
+		s.DisableHistory = !checked
+		a.persist()
+	})
+	a.themed = append(a.themed, a.redirectsBox, a.insecureBox, historyBox)
 
 	a.settingsInfo = a.newHint(func(t *Theme) string {
 		path := "(not saved)"
 		if a.store != nil {
 			path = a.store.Path
 		}
-		return fmt.Sprintf("[%s]Version   [%s]%s\n[%s]Built     [%s]%s\n[%s]Data file [%s]%s",
+		hist := "(not saved)"
+		if a.store != nil {
+			hist = a.store.HistoryPath()
+		}
+		return fmt.Sprintf("[%s]Version   [%s]%s\n[%s]Built     [%s]%s\n[%s]Data file [%s]%s\n[%s]History   [%s]%s",
 			t.HexMuted, t.HexText, tview.Escape(a.info.Version),
 			t.HexMuted, t.HexText, tview.Escape(a.info.BuildTime),
-			t.HexMuted, t.HexText, tview.Escape(path))
+			t.HexMuted, t.HexText, tview.Escape(path),
+			t.HexMuted, t.HexText, tview.Escape(hist))
 	})
 
 	keys := tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true)
@@ -504,13 +514,15 @@ func (a *App) buildSettingsTab() *tab {
 		AddItem(nil, 1, 0, false).
 		AddItem(a.insecureBox, 1, 0, false).
 		AddItem(nil, 1, 0, false).
-		AddItem(a.settingsInfo, 3, 0, false).
+		AddItem(historyBox, 1, 0, false).
+		AddItem(nil, 1, 0, false).
+		AddItem(a.settingsInfo, 4, 0, false).
 		AddItem(nil, 1, 0, false).
 		AddItem(keys, 0, 1, false)
 	page.SetBorder(true).SetTitle(" Settings ").SetBorderPadding(1, 0, 1, 1)
 	a.bordered = append(a.bordered, page)
 	return &tab{name: "Settings", page: page, wide: true, focus: func() []tview.Primitive {
-		return []tview.Primitive{a.themeDrop, a.timeoutInput, a.redirectsBox, a.insecureBox, keys}
+		return []tview.Primitive{a.themeDrop, a.timeoutInput, a.redirectsBox, a.insecureBox, historyBox, keys}
 	}}
 }
 

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Request history, like Postman: a History view in the sidebar (Alt+H / Alt+C / F3,
+  or click), grouped by day. Open an entry to get the request back with the response
+  it got, save it to a collection, filter, delete, or clear all. Stored in
+  `<workspace>.history.json`; newest 200 entries, bodies up to 64 KB; can be turned
+  off in Settings. `term-rest-client history [-n N]` lists it.
 - Response pane shows the request headers that were actually sent (including
   Authorization, Content-Type, User-Agent, Host, Content-Length, Accept-Encoding).
 - Tests, Request Headers, Response Headers and Body are foldable sections: keys

@@ -148,6 +148,17 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "move", "Move a request")
 	h.key(tcell.KeyEsc, 0, 0)
 
+	// 6c. History in the sidebar.
+	h.do(func() { h.a.loadIntoBuilder(models.NewRequest(""), nil) })
+	h.key(tcell.KeyRune, 'h', tcell.ModAlt)
+	h.key(tcell.KeyDown, 0, 0)
+	h.key(tcell.KeyEnter, 0, 0) // open it: request + the response it got
+	h.do(func() { h.a.tv.SetFocus(h.a.historyView) })
+	h.key(tcell.KeyUp, 0, 0)
+	h.key(tcell.KeyDown, 0, 0)
+	writeShot(t, h, dir, "history", "Request history")
+	h.key(tcell.KeyRune, 'c', tcell.ModAlt)
+
 	// 7. Settings in another theme.
 	g, gws := newApp("Gruvbox Dark")
 	open(g, reqAt(t, gws, "User Service/Lookup/Get JSON"), 7)

@@ -748,3 +748,159 @@ func TestResponseSectionsFold(t *testing.T) {
 		}
 	})
 }
+
+func TestHistory(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := storage.SampleWorkspace()
+	ws.SetVariable("baseUrl", srv.URL)
+	h := start(t, ws)
+
+	send := func(r *models.Request) {
+		h.do(func() { h.a.loadIntoBuilder(*r, r); h.a.tv.SetFocus(h.a.urlInput) })
+		before := 0
+		h.do(func() { before = len(h.a.history.Entries) })
+		h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+		h.eventually("history entry", func() bool { return len(h.a.history.Entries) == before+1 })
+	}
+	bearer := reqAt(t, ws, "Auth API/Bearer Token")
+	send(bearer)
+	send(reqAt(t, ws, "Health Check"))
+
+	// Newest first, with where it came from, and saved to its own file.
+	h.do(func() {
+		e := h.a.history.Entries
+		if e[0].Request.Name != "Health Check" || e[1].Source != "Auth API / Bearer Token" || e[1].Status != 200 {
+			t.Fatalf("entries: %+v / %+v", e[0], e[1])
+		}
+		if e[1].Request.URL != "{{baseUrl}}/bearer" || e[1].URL != srv.URL+"/bearer" {
+			t.Fatal("history must keep the editable request and the resolved URL")
+		}
+		if e[1].RequestHeaders["Authorization"][0] != "Bearer my-secret-token" || len(e[1].Tests) != 2 {
+			t.Fatal("sent headers or test results not recorded")
+		}
+	})
+	if saved, err := h.store.LoadHistory(); err != nil || len(saved.Entries) != 2 {
+		t.Fatalf("history not saved: %v", err)
+	}
+
+	// Alt+H shows the history list.
+	h.key(tcell.KeyRune, 'h', tcell.ModAlt)
+	if h.focus() != h.a.historyView {
+		t.Fatalf("focus = %T", h.focus())
+	}
+	s := h.screenText()
+	for _, want := range []string{"History (2)", "Today", "GET    200 /bearer"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+
+	// Moving the cursor shows the full URL in the status bar.
+	h.key(tcell.KeyDown, 0, 0)
+	if s := h.screenText(); !strings.Contains(s, "GET "+srv.URL+"/bearer · 200 OK") || !strings.Contains(s, "from Auth API / Bearer Token") {
+		t.Fatalf("status bar should describe the entry:\n%s", s)
+	}
+
+	// Open the older entry: request and its old response come back, unsaved.
+	h.do(func() {
+		h.a.loadIntoBuilder(models.NewRequest(""), nil) // clean builder, no prompt
+		h.a.rebuildHistory(h.a.history.Entries[1])
+		h.a.tv.SetFocus(h.a.historyView)
+	})
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if h.a.req.URL != "{{baseUrl}}/bearer" || h.a.req.Auth.Type != models.AuthBearer || h.a.linked != nil {
+			t.Fatalf("request not restored: %+v linked=%v", h.a.req, h.a.linked)
+		}
+		if h.a.result == nil || h.a.result.fromHistory == nil || h.a.result.resp.StatusCode != 200 {
+			t.Fatal("response not restored")
+		}
+	})
+	if s := h.screenText(); !strings.Contains(s, "From history") || !strings.Contains(s, `"authenticated"`) {
+		t.Fatalf("history response not shown:\n%s", s)
+	}
+
+	// Filter, then clear the filter.
+	h.do(func() { h.a.tv.SetFocus(h.a.historyView) })
+	h.key(tcell.KeyRune, '/', 0)
+	h.typeText("health")
+	h.key(tcell.KeyEnter, 0, 0)
+	if s := h.screenText(); !strings.Contains(s, "(1/2)") || strings.Contains(s, "200 /bearer") || !strings.Contains(s, "200 /get") {
+		t.Fatalf("filter not applied:\n%s", s)
+	}
+	h.key(tcell.KeyRune, 'c', 0)
+	h.do(func() {
+		if h.a.historyFilter != "" {
+			t.Fatal("filter not cleared")
+		}
+	})
+
+	// A failed request is recorded too.
+	h.do(func() {
+		r := models.NewRequest("down")
+		r.URL = "http://127.0.0.1:1/nothing"
+		h.a.loadIntoBuilder(r, nil)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("error entry", func() bool { return len(h.a.history.Entries) == 3 && h.a.history.Entries[0].Error != "" })
+	if s := h.screenText(); !strings.Contains(s, "ERR /nothing") {
+		t.Fatalf("error entry not listed:\n%s", s)
+	}
+
+	// d deletes the selected entry, X clears everything after confirming.
+	h.do(func() { h.a.rebuildHistory(h.a.history.Entries[0]); h.a.tv.SetFocus(h.a.historyView) })
+	h.key(tcell.KeyRune, 'd', 0)
+	h.do(func() {
+		if len(h.a.history.Entries) != 2 || h.a.history.Entries[0].Error != "" {
+			t.Fatal("delete failed")
+		}
+	})
+	h.key(tcell.KeyRune, 'X', 0)
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.history.Entries) != 0 {
+			t.Fatal("clear failed")
+		}
+	})
+	if saved, _ := h.store.LoadHistory(); len(saved.Entries) != 0 {
+		t.Fatal("cleared history not saved")
+	}
+
+	// With history turned off nothing is recorded.
+	h.do(func() {
+		h.a.ws.Settings.DisableHistory = true
+		h.a.loadIntoBuilder(*bearer, bearer)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("response", func() bool { return !h.a.sending && h.a.result != nil && h.a.result.resp != nil })
+	h.do(func() {
+		if len(h.a.history.Entries) != 0 {
+			t.Fatal("recorded while history is off")
+		}
+	})
+
+	// F3 switches back to the collections tree.
+	h.key(tcell.KeyF3, 0, 0)
+	if h.focus() != h.a.tree {
+		t.Fatalf("F3 focus = %T", h.focus())
+	}
+}
+
+func TestDayLabel(t *testing.T) {
+	now = func() time.Time { return time.Date(2026, 10, 8, 9, 0, 0, 0, time.Local) }
+	defer func() { now = time.Now }()
+	cases := map[time.Time]string{
+		time.Date(2026, 10, 8, 0, 1, 0, 0, time.Local):   "Today",
+		time.Date(2026, 10, 7, 23, 59, 0, 0, time.Local): "Yesterday",
+		time.Date(2026, 10, 1, 12, 0, 0, 0, time.Local):  "Thu 01 Oct",
+		time.Date(2025, 12, 31, 12, 0, 0, 0, time.Local): "Wed 31 Dec 2025",
+	}
+	for in, want := range cases {
+		if got := dayLabel(in); got != want {
+			t.Errorf("dayLabel(%v) = %q, want %q", in, got, want)
+		}
+	}
+}

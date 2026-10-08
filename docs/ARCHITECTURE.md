@@ -54,6 +54,10 @@ The workspace file is written with a temp file and rename, so a crash can't leav
 
 Collections form a tree: `Collection.Folders` holds nested collections (shown as folders) and `Workspace.Requests` holds top-level requests. Code that needs "the list this item lives in" uses `Workspace.RequestsIn(parent)` / `FoldersIn(parent)`, where a nil parent means the top level, so the same code handles every level.
 
+## History
+
+`models.History` (newest first, capped at 200 entries, bodies cut at 64 KB) is saved by `storage.Store.SaveHistory` to `<workspace>.history.json`, separate from the workspace. `ui/send.go` records an entry in `finish` for every request that got a response or failed on the network (not for cancelled ones or ones that never left, such as an empty URL). `ui/history.go` draws the sidebar view and rebuilds a `sendResult` from an entry, so the response pane renders history exactly like a live response.
+
 ## Testing
 
 - Unit tests cover variables, the request engine, scripts, storage and the HTTP client.

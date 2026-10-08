@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 )
@@ -52,15 +53,55 @@ func (s *Store) Load() (ws *models.Workspace, created bool, err error) {
 
 // Save writes the workspace atomically (temp file + rename).
 func (s *Store) Save(ws *models.Workspace) error {
-	data, err := json.MarshalIndent(ws, "", "  ")
+	return writeJSON(s.Path, ws)
+}
+
+// HistoryPath is where request history is kept: next to the workspace,
+// e.g. workspace.json -> workspace.history.json. It is a separate file so a
+// workspace that is committed to git doesn't change on every request.
+func (s *Store) HistoryPath() string {
+	return strings.TrimSuffix(s.Path, filepath.Ext(s.Path)) + ".history.json"
+}
+
+// LoadHistory reads the history file. A missing file is an empty history.
+func (s *Store) LoadHistory() (*models.History, error) {
+	h := &models.History{}
+	data, err := os.ReadFile(s.HistoryPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return h, nil
+	}
+	if err != nil {
+		return h, err
+	}
+	if err := json.Unmarshal(data, h); err != nil {
+		return &models.History{}, fmt.Errorf("parse %s: %w", s.HistoryPath(), err)
+	}
+	entries := h.Entries[:0]
+	for _, e := range h.Entries {
+		if e != nil {
+			e.Request.Normalize()
+			entries = append(entries, e)
+		}
+	}
+	h.Entries = entries
+	return h, nil
+}
+
+// SaveHistory writes the history file atomically.
+func (s *Store) SaveHistory(h *models.History) error {
+	return writeJSON(s.HistoryPath(), h)
+}
+
+func writeJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(s.Path)
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".workspace-*.json")
+	tmp, err := os.CreateTemp(dir, ".tmp-*.json")
 	if err != nil {
 		return err
 	}
@@ -73,7 +114,7 @@ func (s *Store) Save(ws *models.Workspace) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, s.Path)
+	return os.Rename(tmpName, path)
 }
 
 // SampleWorkspace is what a first run starts with.

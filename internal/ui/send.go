@@ -26,6 +26,9 @@ type sendResult struct {
 	method, url string
 	started     time.Time
 	reqHeaders  http.Header
+	request     models.Request // as edited, for history
+	source      string         // path of the saved request, if any
+	fromHistory *models.HistoryEntry
 	resp        *httpclient.Response
 	err         error
 	cancelled   bool
@@ -178,6 +181,8 @@ func (a *App) send() {
 		missing:    prepared.Missing,
 		warnings:   prepared.Warnings,
 		reqHeaders: prepared.SentHeaders(),
+		request:    req,
+		source:     a.linkedPath(),
 	}
 	a.result = res
 	a.renderResponse()
@@ -235,8 +240,24 @@ func (a *App) finish(res *sendResult, tests string, resp *httpclient.Response, e
 		}
 		a.setStatus(level, msg)
 	}
+	a.recordHistory(res)
 	a.renderResponse()
 	a.response.ScrollToBeginning()
+}
+
+// linkedPath is "Collection / Folder / Request" for the open saved request.
+func (a *App) linkedPath() string {
+	if a.linked == nil {
+		return ""
+	}
+	path, ok := a.ws.PathOf(a.linked)
+	if !ok {
+		return ""
+	}
+	if len(path) == 0 {
+		return a.linked.Name
+	}
+	return models.PathName(path) + " / " + a.linked.Name
 }
 
 func testCounts(results []script.Result) (passed, total int) {
@@ -298,6 +319,13 @@ func (a *App) renderResponse() {
 	}
 	for _, w := range res.warnings {
 		line("[%s]! %s", t.HexWarning, esc(w))
+	}
+	if e := res.fromHistory; e != nil {
+		note := "From history · " + e.Time.Local().Format("Mon 02 Jan 2006 15:04:05")
+		if e.BodyTruncated {
+			note += fmt.Sprintf(" · body kept up to %s of %s", humanBytes(len(e.Body)), humanBytes(e.BodySize))
+		}
+		line("[%s]%s", t.HexInfo, esc(note))
 	}
 	line("")
 
@@ -510,6 +538,7 @@ func (a *App) applyTheme() {
 	if a.tree.GetRoot() != nil {
 		a.rebuildTree(nil)
 	}
+	a.rebuildHistory(nil)
 	if a.authFields != nil {
 		prev := a.loading
 		a.loading = true

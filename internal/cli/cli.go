@@ -212,3 +212,37 @@ func find(ws *models.Workspace, name string) []*models.Request {
 	}
 	return under
 }
+
+// History prints the most recent history entries, newest first.
+func History(out, errOut io.Writer, store *storage.Store, args []string) int {
+	fs := flag.NewFlagSet("history", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	limit := fs.Int("n", 20, "number of entries to show (0 for all)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	h, err := store.LoadHistory()
+	if err != nil {
+		fmt.Fprintln(errOut, "history:", err)
+		return 1
+	}
+	if len(h.Entries) == 0 {
+		fmt.Fprintln(out, "No history yet. Requests sent from the app are recorded here.")
+		return 0
+	}
+	for i, e := range h.Entries {
+		if *limit > 0 && i >= *limit {
+			break
+		}
+		status := fmt.Sprintf("%d", e.Status)
+		if e.Error != "" {
+			status = "ERR"
+		}
+		line := fmt.Sprintf("%s  %-7s %-3s %6d ms  %s", e.Time.Local().Format("2006-01-02 15:04:05"), e.Method, status, e.DurationMs, e.URL)
+		if e.Source != "" {
+			line += "  (" + e.Source + ")"
+		}
+		fmt.Fprintln(out, line)
+	}
+	return 0
+}

@@ -17,6 +17,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Collections and folders, like Postman**: group requests into collections, folders inside collections, and folders inside folders to any depth. Requests can also live at the top level. Create, rename, duplicate, reorder, move and delete anything. Everything is saved to a JSON file automatically.
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
 - **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
+- **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -36,6 +37,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **Light** theme | **`run` from the command line**, usable in CI |
 | ![Moving a request into another folder](assets/screenshots/move.png) | ![Request and response headers](assets/screenshots/headers.png) |
 | **Folders**: nest them as deep as you like, and press `m` to move a request or folder | **Request and response headers**, each foldable (here the body is folded) |
+| ![Request history](assets/screenshots/history.png) | |
+| **History**: every request you sent, grouped by day; the status bar shows the full URL | |
 
 ## Quick Start
 
@@ -241,6 +244,33 @@ The tree works like Postman's sidebar:
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
 
+### History
+
+Every request you send is recorded, like Postman's History tab. Switch the sidebar with `Alt+H` (History) and `Alt+C` (Collections), `F3` to flip between them, or click the tabs above the sidebar.
+
+```
+ Collections   History (3)
+ ▾ Today
+   11:42 POST   201 /users
+   11:40 GET    200 /users?page=2
+   11:38 GET    ERR /health
+ ▾ Yesterday
+   17:05 DELETE 204 /users/7
+```
+
+| Keys | Action |
+|------|--------|
+| Arrows | Move through entries. The status bar shows the full URL, status, time and the saved request it came from |
+| `Enter` | Open it: the request goes into the builder as an unsaved copy and the response pane shows the response it got then, marked "From history" |
+| `s` | Save the entry to a collection or folder |
+| `/` | Filter by text in the URL, method, status or request name. `c` clears the filter |
+| `d` (or `Delete`) | Delete the entry |
+| `X` | Clear all history, after confirmation |
+
+Each entry keeps the request as you wrote it (with `{{variables}}`, so sending it again uses current values), the resolved URL and headers that were sent, the status, timing, response headers, test results, and up to 64 KB of the response body. Failed requests (connection refused, timeouts) are recorded too. The newest 200 entries are kept.
+
+History is stored next to the workspace file as `<name>.history.json` (for example `workspace.history.json`), so committing a workspace file doesn't pick up your request log. Turn recording off with **Record history** in Settings. `term-rest-client history` prints recent entries from the command line.
+
 ### Response sections
 
 The response pane is split into sections that you can fold open (`▾`) or closed (`▸`):
@@ -302,6 +332,7 @@ term-rest-client run "User Service/Lookup/Get JSON"     # one request, by its fu
 term-rest-client run "User Service/Users"               # everything in a folder, sub-folders included
 term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
 term-rest-client run "Health Check"                     # a top-level request
+term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 

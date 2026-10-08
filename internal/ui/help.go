@@ -40,6 +40,14 @@ var helpSections = []helpSection{
 		{"d  (or Delete)", "Delete (asks first)"},
 		{"Shift+Up/Down, K/J", "Move up / down"},
 	}},
+	{"History (sidebar)", [][2]string{
+		{"Alt+H / Alt+C, F3", "Show History / Collections (F3 switches); or click the sidebar tabs"},
+		{"Enter", "Open the request again, with the response it got"},
+		{"s", "Save the entry to a collection"},
+		{"/  then  c", "Filter by URL, method, status or name; c clears the filter"},
+		{"d  (or Delete)", "Delete the entry"},
+		{"X", "Clear all history (asks first)"},
+	}},
 	{"Response pane", [][2]string{
 		{"Arrows, PgUp/PgDn, g/G", "Scroll"},
 		{"r / h / t / b", "Show or hide Request headers, response Headers, Tests, Body"},
