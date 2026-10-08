@@ -16,7 +16,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Tests**: one assertion per line (`status == 200`, `json.items[0].id exists`, `time < 500` ...), plus `set token = json.token` to capture values for the next request.
 - **Collections and folders, like Postman**: group requests into collections, folders inside collections, and folders inside folders to any depth. Requests can also live at the top level. Create, rename, duplicate, reorder, move and delete anything. Everything is saved to a JSON file automatically.
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
-- **Response viewer**: status, timing, size, sorted headers, pretty-printed and colour-highlighted JSON, test results. Press `s` to save the body to a file.
+- **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -34,8 +34,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **F1** shows every shortcut | **Settings** with the Gruvbox Dark theme |
 | ![Light theme](assets/screenshots/light.png) | ![Command-line mode](assets/screenshots/cli.png) |
 | **Light** theme | **`run` from the command line**, usable in CI |
-| ![Moving a request into another folder](assets/screenshots/move.png) | |
-| **Folders**: nest them as deep as you like, and press `m` to move a request or folder | |
+| ![Moving a request into another folder](assets/screenshots/move.png) | ![Request and response headers](assets/screenshots/headers.png) |
+| **Folders**: nest them as deep as you like, and press `m` to move a request or folder | **Request and response headers**, each foldable (here the body is folded) |
 
 ## Quick Start
 
@@ -241,6 +241,21 @@ The tree works like Postman's sidebar:
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
 
+### Response sections
+
+The response pane is split into sections that you can fold open (`▾`) or closed (`▸`):
+
+| Section | Key | Shows |
+|---------|-----|-------|
+| Tests | `t` | Each test line passed or failed, plus captured values |
+| Request Headers | `r` | Every header that was sent, including the ones added for you: `Authorization` from the Auth tab, `Content-Type` from the body type, `User-Agent`, `Host`, `Content-Length` and `Accept-Encoding` |
+| Response Headers | `h` | The headers the server returned, sorted by name |
+| Body | `b` | The body, pretty-printed and highlighted when it's JSON |
+
+Press the key while the response pane has focus, or click the section heading. Request Headers starts folded so the response stays readable; whatever you choose is remembered between runs. The status line (code, time, size) always stays visible.
+
+![Sections folded](assets/screenshots/folded.png)
+
 In dialogs: `Enter` confirms, `Tab` moves between fields, `Esc` cancels.
 
 ### Variables
@@ -290,7 +305,7 @@ term-rest-client run "Health Check"                     # a top-level request
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-v` also prints response headers and bodies. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
 
 ## Where data is stored
 

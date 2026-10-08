@@ -42,6 +42,8 @@ var helpSections = []helpSection{
 	}},
 	{"Response pane", [][2]string{
 		{"Arrows, PgUp/PgDn, g/G", "Scroll"},
+		{"r / h / t / b", "Show or hide Request headers, response Headers, Tests, Body"},
+		{"Mouse", "Click a section heading to show or hide it"},
 		{"s", "Save the response body to a file"},
 	}},
 	{"Application", [][2]string{

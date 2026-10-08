@@ -135,6 +135,9 @@ type Settings struct {
 	TimeoutSeconds     int    `json:"timeout_seconds"`
 	DisableRedirects   bool   `json:"disable_redirects,omitempty"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
+	// CollapsedSections remembers which response pane sections are folded
+	// ("tests", "request_headers", "response_headers", "body").
+	CollapsedSections map[string]bool `json:"collapsed_sections,omitempty"`
 }
 
 // Draft is the unsaved builder state, restored on the next start.

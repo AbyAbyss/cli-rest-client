@@ -674,3 +674,77 @@ func TestSaveAsIntoNestedFolder(t *testing.T) {
 		}
 	})
 }
+
+func TestResponseSectionsFold(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := storage.SampleWorkspace()
+	ws.SetVariable("baseUrl", srv.URL)
+	h := start(t, ws)
+	bearer := reqAt(t, ws, "Auth API/Bearer Token")
+	h.do(func() { h.a.loadIntoBuilder(*bearer, bearer); h.a.tv.SetFocus(h.a.urlInput) })
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("response", func() bool { return h.a.result != nil && h.a.result.resp != nil })
+
+	// Defaults: request headers folded, everything else open.
+	s := h.screenText()
+	for _, want := range []string{"▸ Request Headers (4)", "▾ Response Headers (3)", "▾ Tests 2/2 passed", "▾ Body", "Content-Type: application/json"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Authorization: Bearer") {
+		t.Fatal("request headers should start folded")
+	}
+
+	// Keys work when the response pane has focus.
+	h.do(func() { h.a.tv.SetFocus(h.a.response) })
+	h.key(tcell.KeyRune, 'r', 0)
+	h.key(tcell.KeyRune, 'h', 0)
+	h.key(tcell.KeyRune, 'b', 0)
+	s = h.screenText()
+	for _, want := range []string{"▾ Request Headers (4)", "Authorization: Bearer my-secret-token", "User-Agent: term-rest-client", "Accept-Encoding: gzip", "▸ Response Headers (3)", "▸ Body"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("after toggling, missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Content-Type: application/json") || strings.Contains(s, `"authenticated"`) {
+		t.Fatal("folded sections still shown")
+	}
+
+	// Clicking a section heading toggles it too.
+	lines := strings.Split(s, "\n")
+	clicked := false
+	for y, line := range lines {
+		if x := strings.Index(line, "▸ Response Headers"); x >= 0 {
+			cx := len([]rune(line[:x])) + 4
+			h.screen.InjectMouse(cx, y, tcell.Button1, 0)
+			h.screen.InjectMouse(cx, y, tcell.ButtonNone, 0)
+			clicked = true
+			break
+		}
+	}
+	if !clicked {
+		t.Fatal("heading not on screen")
+	}
+	h.eventually("click toggles", func() bool { return !h.a.sectionCollapsed(secRespHeaders) })
+
+	// Choices are saved.
+	saved, _, err := h.store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := saved.Settings.CollapsedSections
+	if got[secReqHeaders] || got[secRespHeaders] || !got[secBody] {
+		t.Fatalf("collapsed sections not persisted: %v", got)
+	}
+
+	// The keys only act in the response pane, not while typing elsewhere.
+	h.do(func() { h.a.tv.SetFocus(h.a.urlInput) })
+	h.key(tcell.KeyRune, 'b', 0)
+	h.do(func() {
+		if !h.a.sectionCollapsed(secBody) || !strings.HasSuffix(h.a.req.URL, "b") {
+			t.Fatal("typing b in the URL must not toggle the body")
+		}
+	})
+}

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Response pane shows the request headers that were actually sent (including
+  Authorization, Content-Type, User-Agent, Host, Content-Length, Accept-Encoding).
+- Tests, Request Headers, Response Headers and Body are foldable sections: keys
+  `t` / `r` / `h` / `b` in the response pane, or click the heading. Choices are saved.
+- `run -v` prints sent (`>`) and received (`<`) headers like `curl -v`.
 - Folders inside collections, nested to any depth, and requests at the top level outside
   any collection (like Postman). New tree keys: `f` new folder, `m` move to another
   collection/folder/top level; `Left` on a request jumps to its folder.

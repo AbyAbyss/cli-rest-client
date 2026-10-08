@@ -53,7 +53,8 @@ func TestRunFailuresAndOverrides(t *testing.T) {
 	// Wrong token: the bearer test compares against {{token}}, so override
 	// only the request side by pointing baseUrl at the server.
 	code := Run(&out, &errOut, ws, nil, []string{"-v", "-set", "baseUrl=" + srv.URL, "-set", "token=abc", "auth api/bearer token"})
-	if code != 0 || !strings.Contains(out.String(), `"token":"abc"`) {
+	if code != 0 || !strings.Contains(out.String(), `"token":"abc"`) ||
+		!strings.Contains(out.String(), "  > Authorization: Bearer abc") || !strings.Contains(out.String(), "  < Content-Type: application/json") {
 		t.Fatalf("exit %d\n%s", code, out.String())
 	}
 	if ws.VariableMap()["token"] != "my-secret-token" {

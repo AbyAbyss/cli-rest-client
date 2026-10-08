@@ -85,6 +85,22 @@ func TestScreenshots(t *testing.T) {
 	send(h)
 	writeShot(t, h, dir, "main", "Term REST Client")
 
+	// 1b. Request and response headers open, body folded.
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = map[string]bool{secReqHeaders: false, secBody: true}
+		h.a.renderResponse()
+	})
+	writeShot(t, h, dir, "headers", "Request and response headers")
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = map[string]bool{secTests: true, secReqHeaders: true, secRespHeaders: true}
+		h.a.renderResponse()
+	})
+	writeShot(t, h, dir, "folded", "Sections folded")
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = nil
+		h.a.renderResponse()
+	})
+
 	// 2. Query params and headers with variables.
 	open(h, reqAt(t, ws, "User Service/Lookup/Query Params"), 0)
 	send(h)

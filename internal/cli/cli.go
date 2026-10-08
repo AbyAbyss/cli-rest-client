@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -140,14 +141,10 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		changed = apply(ws, captures, overrides) || changed
 
 		if *verbose {
-			names := make([]string, 0, len(resp.Headers))
-			for k := range resp.Headers {
-				names = append(names, k)
-			}
-			sort.Strings(names)
-			for _, k := range names {
-				fmt.Fprintf(out, "  %s: %s\n", k, strings.Join(resp.Headers[k], ", "))
-			}
+			fmt.Fprintf(out, "  > %s %s\n", p.Request.Method, p.Request.URL.RequestURI())
+			printHeaders(out, "  > ", p.SentHeaders())
+			fmt.Fprintf(out, "  < %s %s\n", resp.Proto, resp.Status)
+			printHeaders(out, "  < ", resp.Headers)
 			fmt.Fprintln(out)
 			out.Write(resp.Body)
 			fmt.Fprintln(out)
@@ -163,6 +160,17 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		return 1
 	}
 	return 0
+}
+
+func printHeaders(out io.Writer, prefix string, h http.Header) {
+	names := make([]string, 0, len(h))
+	for k := range h {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		fmt.Fprintf(out, "%s%s: %s\n", prefix, k, strings.Join(h[k], ", "))
+	}
 }
 
 // apply persists script assignments, except for variables overridden with -set.

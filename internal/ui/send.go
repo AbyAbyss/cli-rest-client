@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -24,6 +25,7 @@ import (
 type sendResult struct {
 	method, url string
 	started     time.Time
+	reqHeaders  http.Header
 	resp        *httpclient.Response
 	err         error
 	cancelled   bool
@@ -33,17 +35,90 @@ type sendResult struct {
 }
 
 func (a *App) buildResponse() {
-	a.response = tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true)
+	a.response = tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true).SetRegions(true)
 	a.response.SetBorder(true).SetTitle(" Response ").SetBorderPadding(0, 0, 1, 1)
 	a.response.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyRune && ev.Modifiers() == 0 && ev.Rune() == 's' {
+		if ev.Key() != tcell.KeyRune || ev.Modifiers() != 0 {
+			return ev
+		}
+		if ev.Rune() == 's' {
 			a.saveResponseBody()
 			return nil
 		}
+		for _, sec := range responseSections {
+			if ev.Rune() == sec.key {
+				a.toggleSection(sec.id)
+				return nil
+			}
+		}
 		return ev
+	})
+	// Clicking a section header folds or unfolds it.
+	a.response.SetHighlightedFunc(func(added, _, _ []string) {
+		if len(added) == 0 {
+			return
+		}
+		a.response.Highlight()
+		if id, ok := strings.CutPrefix(added[0], "sec-"); ok {
+			a.toggleSection(id)
+		}
 	})
 	a.themed = append(a.themed, a.response)
 	a.bordered = append(a.bordered, a.response)
+}
+
+// Foldable sections of the response pane, with their toggle keys.
+const (
+	secTests       = "tests"
+	secReqHeaders  = "request_headers"
+	secRespHeaders = "response_headers"
+	secBody        = "body"
+)
+
+var responseSections = []struct {
+	id  string
+	key rune
+}{{secTests, 't'}, {secReqHeaders, 'r'}, {secRespHeaders, 'h'}, {secBody, 'b'}}
+
+func sectionKey(id string) rune {
+	for _, s := range responseSections {
+		if s.id == id {
+			return s.key
+		}
+	}
+	return 0
+}
+
+// sectionCollapsed reports whether a section is folded. Request headers start
+// folded; everything else starts open. Choices are saved in Settings.
+func (a *App) sectionCollapsed(id string) bool {
+	if v, ok := a.ws.Settings.CollapsedSections[id]; ok {
+		return v
+	}
+	return id == secReqHeaders
+}
+
+func (a *App) toggleSection(id string) {
+	if a.ws.Settings.CollapsedSections == nil {
+		a.ws.Settings.CollapsedSections = map[string]bool{}
+	}
+	a.ws.Settings.CollapsedSections[id] = !a.sectionCollapsed(id)
+	a.persist()
+	row, col := a.response.GetScrollOffset()
+	a.renderResponse()
+	a.response.ScrollTo(row, col)
+}
+
+// writeHeaders lists headers sorted by name.
+func writeHeaders(line func(string, ...any), h http.Header, t *Theme) {
+	names := make([]string, 0, len(h))
+	for k := range h {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		line("  [%s]%s: [%s]%s", t.HexMuted, tview.Escape(k), t.HexText, tview.Escape(strings.Join(h[k], ", ")))
+	}
 }
 
 func (a *App) buildStatusBar() {
@@ -97,11 +172,12 @@ func (a *App) send() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.sending, a.cancel = true, cancel
 	res := &sendResult{
-		method:   prepared.Request.Method,
-		url:      prepared.Request.URL.String(),
-		started:  time.Now(),
-		missing:  prepared.Missing,
-		warnings: prepared.Warnings,
+		method:     prepared.Request.Method,
+		url:        prepared.Request.URL.String(),
+		started:    time.Now(),
+		missing:    prepared.Missing,
+		warnings:   prepared.Warnings,
+		reqHeaders: prepared.SentHeaders(),
 	}
 	a.result = res
 	a.renderResponse()
@@ -261,42 +337,50 @@ func (a *App) renderResponse() {
 		}
 		a.response.SetTitle(fmt.Sprintf(" Response · [%s]%d[-] ", color, r.StatusCode))
 
+		// section writes a clickable, foldable heading and reports whether
+		// the section's content should be shown.
+		section := func(id, title, extra string) bool {
+			icon := "▾"
+			if a.sectionCollapsed(id) {
+				icon = "▸"
+			}
+			line("")
+			line(`["sec-%s"][%s]%s [%s::b]%s[-:-:-] %s  [%s]· %c[""]`,
+				id, t.HexMuted, icon, t.HexAccent, title, extra, t.HexMuted, sectionKey(id))
+			return !a.sectionCollapsed(id)
+		}
+
 		if len(res.tests) > 0 {
 			passed, total := testCounts(res.tests)
-			line("")
 			summary := t.HexSuccess
 			if passed < total {
 				summary = t.HexError
 			}
-			line("[%s::b]Tests[-:-:-] [%s]%d/%d passed", t.HexAccent, summary, passed, total)
-			for _, tr := range res.tests {
-				switch {
-				case tr.Capture != nil:
-					line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
-				case tr.Passed:
-					line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
-				default:
-					line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
+			if section(secTests, "Tests", fmt.Sprintf("[%s]%d/%d passed", summary, passed, total)) {
+				for _, tr := range res.tests {
+					switch {
+					case tr.Capture != nil:
+						line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
+					case tr.Passed:
+						line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
+					default:
+						line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
+					}
 				}
 			}
 		}
 
-		line("")
-		line("[%s::b]Headers[-:-:-] [%s](%d)", t.HexAccent, t.HexMuted, len(r.Headers))
-		names := make([]string, 0, len(r.Headers))
-		for k := range r.Headers {
-			names = append(names, k)
+		if section(secReqHeaders, "Request Headers", fmt.Sprintf("[%s](%d)", t.HexMuted, len(res.reqHeaders))) {
+			writeHeaders(line, res.reqHeaders, t)
 		}
-		sort.Strings(names)
-		for _, k := range names {
-			line("  [%s]%s: [%s]%s", t.HexMuted, esc(k), t.HexText, esc(strings.Join(r.Headers[k], ", ")))
+		if section(secRespHeaders, "Response Headers", fmt.Sprintf("[%s](%d)", t.HexMuted, len(r.Headers))) {
+			writeHeaders(line, r.Headers, t)
 		}
-
-		line("")
-		line("[%s::b]Body[-:-:-]  [%s](s to save)", t.HexAccent, t.HexMuted)
-		body, _ := prettyBody(r.Body, r.Headers.Get("Content-Type"), t)
-		sb.WriteString("[" + t.HexText + "]")
-		sb.WriteString(body)
+		if section(secBody, "Body", fmt.Sprintf("[%s]%s  · s to save", t.HexMuted, size)) {
+			body, _ := prettyBody(r.Body, r.Headers.Get("Content-Type"), t)
+			sb.WriteString("[" + t.HexText + "]")
+			sb.WriteString(body)
+		}
 	}
 	a.response.SetText(sb.String())
 }
