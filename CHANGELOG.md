@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Import from Postman: collections v2.0/v2.1 (nested folders, inherited auth, raw /
+  urlencoded / form-data / GraphQL bodies, query and path variables, collection
+  variables), environments and globals. Common test/pre-request script patterns are
+  converted; the original JavaScript is kept as comments. `Ctrl+O` (or `i` in the
+  tree) in the app, `term-rest-client import FILE...` on the command line.
 - Environments, like Postman: named variable sets layered over Globals. Environment
   picker next to the URL and `Alt+E` to switch; the Variables tab edits Globals or any
   environment and can create, rename, duplicate, delete and activate them. The response

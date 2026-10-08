@@ -220,6 +220,8 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.duplicateSelected()
 		case 'm':
 			a.moveSelectedTo()
+		case 'i':
+			a.importPostman()
 		case 'K':
 			a.moveSelected(-1)
 		case 'J':

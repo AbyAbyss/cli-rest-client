@@ -21,6 +21,7 @@ var helpSections = []helpSection{
 		{"Ctrl+N", "New empty request"},
 		{"Ctrl+P", "Pretty-print the JSON body"},
 		{"Ctrl+G / F4", "Show the request as a cURL command"},
+		{"Ctrl+O", "Import a Postman collection, environment or globals file"},
 	}},
 	{"Navigation", [][2]string{
 		{"Tab / Shift+Tab", "Move between fields"},
@@ -36,6 +37,7 @@ var helpSections = []helpSection{
 		{"f", "New folder in the selected collection or folder"},
 		{"a  (or r)", "New request in the selected collection or folder"},
 		{"m", "Move to another collection or folder, or the top level"},
+		{"i", "Import from Postman (same as Ctrl+O)"},
 		{"e  (or F2)", "Rename"},
 		{"c", "Duplicate (folders are copied with everything inside)"},
 		{"d  (or Delete)", "Delete (asks first)"},

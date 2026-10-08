@@ -1035,3 +1035,69 @@ func TestEnvironmentsUI(t *testing.T) {
 		}
 	})
 }
+
+func TestImportFromPostmanUI(t *testing.T) {
+	h := start(t, nil)
+	abs, _ := filepath.Abs("../importer/testdata/shop.postman_collection.json")
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(abs) })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		last := h.a.ws.Collections[len(h.a.ws.Collections)-1]
+		if last.Name != "Shop API" || last.CountRequests() != 9 {
+			t.Fatalf("not imported: %+v", last)
+		}
+		if n := h.a.tree.GetCurrentNode(); n == nil || n.GetReference() != any(last) {
+			t.Fatal("imported collection should be selected in the tree")
+		}
+		if len(h.a.dialogs) != 1 {
+			t.Fatal("import notes should be shown")
+		}
+	})
+	if s := h.screenText(); !strings.Contains(s, "Import notes") || !strings.Contains(s, "oauth2 auth is not supported") {
+		t.Fatalf("notes not shown:\n%s", s)
+	}
+	h.key(tcell.KeyEsc, 0, 0)
+	if saved, _, _ := h.store.Load(); saved.Collections[len(saved.Collections)-1].Name != "Shop API" {
+		t.Fatal("import not saved")
+	}
+
+	// Environment import refreshes the picker; the dialog remembers the folder.
+	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
+	h.key(tcell.KeyRune, 'i', 0)
+	h.do(func() {
+		in := h.a.tv.GetFocus().(*tview.InputField)
+		if !strings.HasSuffix(in.GetText(), "testdata"+string(filepath.Separator)) {
+			t.Fatalf("should start in the last folder, got %q", in.GetText())
+		}
+		in.SetText(in.GetText() + "staging.postman_environment.json")
+	})
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		found := false
+		for i := 0; i < h.a.envDrop.GetOptionCount(); i++ {
+			h.a.loading = true
+			h.a.envDrop.SetCurrentOption(i)
+			h.a.loading = false
+			if _, l := h.a.envDrop.GetCurrentOption(); l == "Staging" {
+				found = true
+			}
+		}
+		h.a.refreshEnvPicker()
+		if !found || len(h.a.dialogs) != 0 {
+			t.Fatalf("env picker not refreshed (found=%v) or unexpected notes", found)
+		}
+	})
+
+	// A bad file reports an error and changes nothing.
+	before := 0
+	h.do(func() { before = len(h.a.ws.Collections) })
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("/nonexistent/file.json") })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.ws.Collections) != before || !strings.Contains(h.a.status, "Import failed") {
+			t.Fatalf("bad file: status %q", h.a.status)
+		}
+	})
+}

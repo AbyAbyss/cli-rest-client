@@ -1,0 +1,175 @@
+{
+  "info": {
+    "_postman_id": "7a1b2c3d-0000-4000-8000-000000000001",
+    "name": "Shop API",
+    "description": "Example collection exported from Postman",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://shop.example.com/api" },
+    { "key": "pageSize", "value": "20" }
+  ],
+  "event": [
+    { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["console.log('collection pre')"] } }
+  ],
+  "item": [
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Fast\", function () { pm.expect(pm.response.responseTime).to.be.below(800); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"firstId\", jsonData.items[0].id);",
+                  "pm.response.to.have.header(\"Content-Type\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "X-Debug", "value": "1", "disabled": true }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products?page=1&size={{pageSize}}&sort=name",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "{{pageSize}}" },
+                { "key": "sort", "value": "name" },
+                { "key": "debug", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/:productId/reviews/:reviewId",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", ":productId", "reviews", ":reviewId"],
+              "variable": [
+                { "key": "productId", "value": "42" },
+                { "key": "reviewId", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin",
+          "auth": { "type": "basic", "basic": [
+            { "key": "username", "value": "admin", "type": "string" },
+            { "key": "password", "value": "{{adminPassword}}", "type": "string" }
+          ]},
+          "item": [
+            {
+              "name": "Create product",
+              "event": [
+                { "listen": "prerequest", "script": { "exec": [
+                  "pm.environment.set(\"sku\", \"SKU-{{$randomInt}}\");",
+                  "pm.variables.set('requestId', '{{$guid}}');"
+                ] } }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "X-Request-Id", "value": "{{$guid}}" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lamp\",\n  \"sku\": \"{{sku}}\",\n  \"price\": 19.99\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": "{{baseUrl}}/products"
+              }
+            },
+            {
+              "name": "Delete product",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "DELETE",
+                "url": { "raw": "{{baseUrl}}/products/{{firstId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{firstId}}"] }
+              }
+            }
+          ]
+        },
+        { "name": "Empty folder", "item": [] }
+      ]
+    },
+    {
+      "name": "Login (form)",
+      "request": {
+        "auth": { "type": "inherit" },
+        "method": "POST",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "username", "value": "aby", "type": "text" },
+            { "key": "password", "value": "secret", "type": "text" },
+            { "key": "remember", "value": "1", "type": "text", "disabled": true }
+          ]
+        },
+        "url": "{{baseUrl}}/login"
+      }
+    },
+    {
+      "name": "Upload avatar",
+      "request": {
+        "method": "PUT",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "caption", "value": "me", "type": "text" },
+            { "key": "file", "type": "file", "src": "/Users/aby/avatar.png" }
+          ]
+        },
+        "url": "{{baseUrl}}/me/avatar"
+      }
+    },
+    {
+      "name": "GraphQL search",
+      "request": {
+        "auth": { "type": "apikey", "apikey": [
+          { "key": "key", "value": "api_key", "type": "string" },
+          { "key": "value", "value": "{{apiKey}}", "type": "string" },
+          { "key": "in", "value": "query", "type": "string" }
+        ]},
+        "method": "POST",
+        "body": {
+          "mode": "graphql",
+          "graphql": { "query": "query($q: String!) { search(q: $q) { id name } }", "variables": "{\"q\": \"lamp\"}" }
+        },
+        "url": { "host": ["shop", "example", "com"], "protocol": "https", "path": ["graphql"] }
+      }
+    },
+    {
+      "name": "OAuth thing",
+      "request": {
+        "auth": { "type": "oauth2", "oauth2": [] },
+        "method": "GET",
+        "url": "https://shop.example.com/oauth-only"
+      }
+    },
+    {
+      "name": "Plain string request",
+      "request": "https://shop.example.com/health"
+    }
+  ]
+}

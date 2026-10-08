@@ -34,6 +34,7 @@ func run(args []string) int {
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
 		fmt.Fprintf(out, "                                                send saved requests and run their tests\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] env [NAME|none] list environments, or switch the active one\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] import FILE...  import Postman collections, environments or globals\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
@@ -71,6 +72,8 @@ func run(args []string) int {
 			return cli.List(os.Stdout, ws)
 		case "run":
 			return cli.Run(os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "import":
+			return cli.Import(os.Stdout, os.Stderr, ws, store, rest[1:])
 		case "env":
 			return cli.Env(os.Stdout, os.Stderr, ws, store, rest[1:])
 		case "history":

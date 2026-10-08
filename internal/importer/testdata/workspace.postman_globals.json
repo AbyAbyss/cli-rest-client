@@ -1,0 +1,9 @@
+{
+  "id": "0b8f6e8e-0000-4000-8000-000000000003",
+  "name": "My Workspace Globals",
+  "values": [
+    { "key": "token", "value": "from-postman", "enabled": true },
+    { "key": "adminPassword", "value": "hunter2", "enabled": true }
+  ],
+  "_postman_variable_scope": "globals"
+}

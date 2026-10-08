@@ -175,6 +175,20 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "environments", "Environments")
 	h.do(func() { h.a.switchTab(0) })
 
+	// 6e. Import from Postman: the imported tree and the notes dialog.
+	imp, _ := filepath.Abs("../importer/testdata/shop.postman_collection.json")
+	h.do(func() {
+		for _, c := range h.a.ws.Collections[:3] {
+			h.a.collapsed[c] = true
+		}
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(imp) })
+	h.key(tcell.KeyEnter, 0, 0)
+	writeShot(t, h, dir, "import", "Import from Postman")
+	h.key(tcell.KeyEsc, 0, 0)
+
 	// 7. Settings in another theme.
 	g, gws := newApp("Gruvbox Dark")
 	open(g, reqAt(t, gws, "User Service/Lookup/Get JSON"), 7)

@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
+	"github.com/AbyAbyss/cli-rest-client/internal/importer"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
@@ -306,6 +308,46 @@ func Env(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		fmt.Fprintf(out, "Active environment: %s\n", e.Name)
 	} else {
 		fmt.Fprintln(out, "Active environment: none (globals only)")
+	}
+	return 0
+}
+
+// Import reads Postman exports (collections, environments, globals) into
+// the workspace and saves it.
+func Import(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, files []string) int {
+	if len(files) == 0 {
+		fmt.Fprintln(errOut, "import: give one or more Postman export files (collection, environment or globals JSON)")
+		return 2
+	}
+	failed := false
+	imported := 0
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			fmt.Fprintf(errOut, "%s: %v\n", f, err)
+			failed = true
+			continue
+		}
+		res, err := importer.Import(data, ws)
+		if err != nil {
+			fmt.Fprintf(errOut, "%s: %v\n", f, err)
+			failed = true
+			continue
+		}
+		imported++
+		fmt.Fprintf(out, "%s: %s\n", f, res.Summary())
+		for _, w := range res.Warnings {
+			fmt.Fprintf(out, "  note: %s\n", w)
+		}
+	}
+	if imported > 0 && store != nil {
+		if err := store.Save(ws); err != nil {
+			fmt.Fprintln(errOut, "import: could not save workspace:", err)
+			return 1
+		}
+	}
+	if failed {
+		return 1
 	}
 	return 0
 }

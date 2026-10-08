@@ -169,3 +169,29 @@ func hasVar(kvs []models.KeyValue, key string) bool {
 	}
 	return false
 }
+
+func TestImportCommand(t *testing.T) {
+	ws := storage.SampleWorkspace()
+	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
+	var out, errOut bytes.Buffer
+	code := Import(&out, &errOut, ws, store, []string{
+		"../importer/testdata/shop.postman_collection.json",
+		"../importer/testdata/staging.postman_environment.json",
+		"missing.json",
+	})
+	if code != 1 || !strings.Contains(errOut.String(), "missing.json") {
+		t.Fatalf("a missing file should fail the command: %d %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `Imported collection "Shop API": 9 request(s) in 3 folder(s)`) ||
+		!strings.Contains(out.String(), `Imported environment "Staging" with 3 variable(s)`) ||
+		!strings.Contains(out.String(), "  note: ") {
+		t.Fatalf("output:\n%s", out.String())
+	}
+	saved, _, err := store.Load()
+	if err != nil || saved.Environment("Staging") == nil || saved.Collections[len(saved.Collections)-1].Name != "Shop API" {
+		t.Fatalf("not saved: %v", err)
+	}
+	if Import(&out, &errOut, ws, store, nil) != 2 {
+		t.Fatal("no files should be a usage error")
+	}
+}

@@ -19,6 +19,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
 - **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
+- **Import from Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` in the app or `term-rest-client import FILE`.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -197,6 +198,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body |
 | `Ctrl+G`, `F4` | Show the request as a cURL command |
+| `Ctrl+O` | Import a Postman collection, environment or globals file |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
 | `Alt+E` | Switch to the next environment (No Environment → each environment → back) |
@@ -213,6 +215,7 @@ In the **Collections tree**:
 | `f` | New folder inside the selected collection or folder (or the folder of the selected request) |
 | `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
+| `i` | Import from Postman (same as `Ctrl+O`) |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
 | `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
@@ -245,6 +248,34 @@ The tree works like Postman's sidebar:
 - A folder moved to the top level with `m` becomes a collection, and a collection moved into another one becomes a folder.
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
+
+### Importing from Postman
+
+In Postman, export what you need (**Export** on a collection, choose **Collection v2.1**; environments and globals export from their own menus), then:
+
+- in the app press `Ctrl+O` (or `i` in the Collections tree) and enter the file path, or
+- from a terminal: `term-rest-client import ~/Downloads/Shop.postman_collection.json ~/Downloads/Staging.postman_environment.json`
+
+The file type is detected automatically.
+
+| Postman | Becomes |
+|---------|---------|
+| Collection, folders, nested folders | A collection with the same folders |
+| Request method, URL, headers (disabled ones stay disabled) | The same, with query parameters moved to the Params tab |
+| Path variables like `/users/:id` | The value Postman had, or `{{id}}` if it was empty |
+| Auth: Bearer, Basic, API key, No auth | The same. Auth set on the collection or a folder is copied to every request that inherits it |
+| Body: raw JSON / XML / text, x-www-form-urlencoded | The same body type |
+| Body: GraphQL | A JSON body with `query` and `variables` |
+| Body: form-data | Form fields, sent urlencoded. File fields are skipped |
+| Collection variables | Added to Globals (existing globals keep their value) |
+| Environment export | A new environment (not activated) |
+| Globals export | Added to Globals (existing ones keep their value) |
+| `{{$guid}}`, `{{$randomUUID}}` | `{{$uuid}}` |
+| Scripts | Common patterns are converted: `pm.response.to.have.status(200)` → `status == 200`, response time checks, header checks, `pm.environment.set("x", jsonData.a.b)` → `set x = json.a.b`, and literal `set`s in pre-request scripts. The original JavaScript is kept below as comments |
+
+Anything that doesn't carry over (OAuth 2 and other auth types, file uploads, collection-level scripts) is listed in a notes window after the import, so you know what to check. Importing the same collection twice creates "Shop API 2" rather than overwriting.
+
+![Import from Postman](assets/screenshots/import.png)
 
 ### History
 
@@ -359,6 +390,7 @@ term-rest-client run -env Local "User Service"          # use a different enviro
 term-rest-client env                                    # list environments (* marks the active one)
 term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
 term-rest-client history -n 10                          # the last 10 requests sent from the app
+term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 

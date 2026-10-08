@@ -72,6 +72,7 @@ type App struct {
 	varsTarget                                                      *tview.DropDown
 	envButtons                                                      []*tview.Button
 	editingEnv                                                      string
+	lastImportDir                                                   string
 	bodyType                                                        *tview.DropDown
 	authType, authIn                                                *tview.DropDown
 	authUser, authPass, authToken, authKey, authValue               *tview.InputField
@@ -330,6 +331,9 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'e' || ev.Rune() == 'E'):
 		a.cycleEnv()
+		return nil
+	case key == tcell.KeyCtrlO:
+		a.importPostman()
 		return nil
 	case key == tcell.KeyCtrlN:
 		a.newRequest()
