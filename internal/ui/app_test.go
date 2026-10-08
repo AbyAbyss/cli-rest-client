@@ -263,7 +263,7 @@ func TestSendRunsScriptsAndTests(t *testing.T) {
 	h := start(t, ws)
 
 	// Open Payment Gateway / Charge: it has a pre-request script and tests.
-	charge := ws.Collections[2].Requests[0]
+	charge := reqAt(t, ws, "Payment Gateway/Charges/Charge")
 	h.do(func() {
 		h.a.loadIntoBuilder(*charge, charge)
 		h.a.tv.SetFocus(h.a.urlInput)
@@ -339,7 +339,7 @@ func TestSaveAsAndSave(t *testing.T) {
 		if h.a.linked == nil || h.a.linked.Name != "GET widgets" || h.a.isDirty() {
 			t.Fatalf("linked = %+v dirty=%v", h.a.linked, h.a.isDirty())
 		}
-		if h.a.ws.CollectionOf(h.a.linked) != h.a.ws.Collections[0] {
+		if h.a.ws.ParentOf(h.a.linked) != h.a.ws.Collections[0] {
 			t.Fatal("saved to wrong collection")
 		}
 	})
@@ -450,7 +450,7 @@ func TestQuitSavesDraft(t *testing.T) {
 		t.Fatal("Ctrl+Q did not quit")
 	}
 	ws, _, err := h.store.Load()
-	if err != nil || ws.Draft == nil || !strings.HasSuffix(ws.Draft.Request.URL, "/draft") || ws.Draft.Collection != 0 || ws.Draft.Index != 0 {
+	if err != nil || ws.Draft == nil || !strings.HasSuffix(ws.Draft.Request.URL, "/draft") || len(ws.Draft.Folders) != 1 || ws.Draft.Folders[0] != 0 || ws.Draft.Index != 0 {
 		t.Fatalf("draft = %+v err=%v", ws.Draft, err)
 	}
 
@@ -514,6 +514,163 @@ func TestFormatBody(t *testing.T) {
 		}
 		if h.a.req.BodyType != models.BodyJSON {
 			t.Fatal("body type should switch to JSON")
+		}
+	})
+}
+
+// reqAt finds a saved request by its "Collection/Folder/Request" path.
+func reqAt(t *testing.T, ws *models.Workspace, path string) *models.Request {
+	t.Helper()
+	var found *models.Request
+	ws.WalkRequests(func(p []*models.Collection, r *models.Request) {
+		names := []string{}
+		for _, c := range p {
+			names = append(names, c.Name)
+		}
+		if strings.Join(append(names, r.Name), "/") == path {
+			found = r
+		}
+	})
+	if found == nil {
+		t.Fatalf("no request %q", path)
+	}
+	return found
+}
+
+func TestFoldersAndTopLevelRequests(t *testing.T) {
+	empty := &models.Workspace{}
+	empty.Normalize()
+	h := start(t, empty)
+	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
+
+	// n: collection "Shop"; f: folder "Orders" inside it; f again: "Refunds" inside Orders.
+	h.key(tcell.KeyRune, 'n', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("Shop") })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.key(tcell.KeyRune, 'f', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("Orders") })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.key(tcell.KeyRune, 'f', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("Refunds") })
+	h.key(tcell.KeyEnter, 0, 0)
+
+	// a: request inside the selected folder (Refunds).
+	h.key(tcell.KeyRune, 'a', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("Refund order") })
+	h.key(tcell.KeyEnter, 0, 0)
+	var shop, orders, refunds *models.Collection
+	h.do(func() {
+		if len(h.a.ws.Collections) != 1 {
+			t.Fatalf("collections: %d", len(h.a.ws.Collections))
+		}
+		shop = h.a.ws.Collections[0]
+		if len(shop.Folders) != 1 || len(shop.Folders[0].Folders) != 1 {
+			t.Fatalf("folders not nested: %+v", shop)
+		}
+		orders, refunds = shop.Folders[0], shop.Folders[0].Folders[0]
+		if len(refunds.Requests) != 1 || h.a.linked != refunds.Requests[0] {
+			t.Fatal("request not created in the nested folder")
+		}
+		if !strings.Contains(h.a.urlInput.GetTitle(), "Shop / Orders / Refunds / Refund order") {
+			t.Fatalf("title = %q", h.a.urlInput.GetTitle())
+		}
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	if s := h.screenText(); !strings.Contains(s, "Refunds (1)") || !strings.Contains(s, "Orders (1)") || !strings.Contains(s, "Shop (1)") {
+		t.Fatalf("tree not drawn as expected:\n%s", s)
+	}
+
+	// m: move the request to the top level (first option).
+	h.key(tcell.KeyRune, 'm', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.DropDown).SetCurrentOption(0) })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(refunds.Requests) != 0 || len(h.a.ws.Requests) != 1 || h.a.ws.Requests[0] != h.a.linked {
+			t.Fatal("request not moved to top level")
+		}
+		if !strings.Contains(h.a.urlInput.GetTitle(), "]Refund order[") || strings.Contains(h.a.urlInput.GetTitle(), "Shop") {
+			t.Fatalf("title after move = %q", h.a.urlInput.GetTitle())
+		}
+		// Select Refunds and move it to the top level: it becomes a collection.
+		h.a.rebuildTree(refunds)
+	})
+	h.key(tcell.KeyRune, 'm', 0)
+	h.do(func() {
+		d := h.a.tv.GetFocus().(*tview.DropDown)
+		for i := 0; i < d.GetOptionCount(); i++ {
+			if _, label := func() (int, string) { d.SetCurrentOption(i); return d.GetCurrentOption() }(); label == "Shop / Orders / Refunds" {
+				t.Fatal("a folder must not be offered as a destination inside itself")
+			}
+		}
+		d.SetCurrentOption(0)
+	})
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.ws.Collections) != 2 || h.a.ws.Collections[1] != refunds || len(orders.Folders) != 0 {
+			t.Fatal("folder not moved to top level")
+		}
+		// Delete Shop: Orders goes with it.
+		h.a.rebuildTree(shop)
+	})
+	h.key(tcell.KeyRune, 'd', 0)
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.ws.Collections) != 1 || h.a.ws.Collections[0] != refunds {
+			t.Fatal("delete collection failed")
+		}
+	})
+
+	// Persisted, and the draft link survives a top-level request.
+	h.screen.InjectKey(tcell.KeyCtrlQ, 0, tcell.ModCtrl)
+	select {
+	case <-h.done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Ctrl+Q did not quit")
+	}
+	saved, _, err := h.store.Load()
+	if err != nil || len(saved.Requests) != 1 || saved.Requests[0].Name != "Refund order" || saved.Collections[0].Name != "Refunds" {
+		t.Fatalf("not persisted: %v", err)
+	}
+	if saved.Draft == nil || saved.Draft.Index != 0 || len(saved.Draft.Folders) != 0 {
+		t.Fatalf("draft = %+v", saved.Draft)
+	}
+	h2 := start(t, saved)
+	h2.do(func() {
+		if h2.a.linked != saved.Requests[0] {
+			t.Fatal("top-level draft link not restored")
+		}
+	})
+}
+
+func TestSaveAsIntoNestedFolder(t *testing.T) {
+	h := start(t, nil)
+	h.key(tcell.KeyCtrlN, 0, tcell.ModCtrl)
+	h.typeText("http://example.test/admins")
+	h.key(tcell.KeyRune, 's', tcell.ModAlt)
+	h.do(func() {
+		h.a.tv.SetFocus(h.a.tv.GetFocus()) // name field
+	})
+	h.key(tcell.KeyTab, 0, 0)
+	h.do(func() {
+		d := h.a.tv.GetFocus().(*tview.DropDown)
+		found := false
+		for i := 0; i < d.GetOptionCount(); i++ {
+			d.SetCurrentOption(i)
+			if _, label := d.GetCurrentOption(); label == "User Service / Users / Admin" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("nested folder not offered in Save As")
+		}
+	})
+	h.key(tcell.KeyBacktab, 0, 0)
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		admin := h.a.ws.Collections[1].Folders[0].Folders[0]
+		if h.a.ws.ParentOf(h.a.linked) != admin || len(admin.Requests) != 2 {
+			t.Fatalf("not saved into Admin folder")
 		}
 	})
 }

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/cli"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
@@ -80,22 +81,22 @@ func TestScreenshots(t *testing.T) {
 
 	// 1. Main view: JSON body, response, tests.
 	h, ws := newApp("Catppuccin Mocha")
-	open(h, ws.Collections[1].Requests[2], 3)
+	open(h, reqAt(t, ws, "User Service/Users/Create User"), 3)
 	send(h)
 	writeShot(t, h, dir, "main", "Term REST Client")
 
 	// 2. Query params and headers with variables.
-	open(h, ws.Collections[1].Requests[1], 0)
+	open(h, reqAt(t, ws, "User Service/Lookup/Query Params"), 0)
 	send(h)
 	writeShot(t, h, dir, "params", "Query params")
 
 	// 3. Auth tab.
-	open(h, ws.Collections[0].Requests[1], 1)
+	open(h, reqAt(t, ws, "Auth API/Bearer Token"), 1)
 	send(h)
 	writeShot(t, h, dir, "auth", "Bearer token auth")
 
 	// 4. Pre-request script + tests, including a failing assertion.
-	charge := ws.Collections[2].Requests[0]
+	charge := reqAt(t, ws, "Payment Gateway/Charges/Charge")
 	charge.Tests += "\nstatus == 201"
 	open(h, charge, 5)
 	send(h)
@@ -113,15 +114,33 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "save", "Save request")
 	h.key(tcell.KeyEsc, 0, 0)
 
+	// 6b. Move dialog: reorganising requests into folders.
+	h.do(func() {
+		h.a.rebuildTree(reqAt(t, ws, "User Service/Lookup/Query Params"))
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyRune, 'm', 0)
+	h.do(func() {
+		d := h.a.tv.GetFocus().(*tview.DropDown)
+		for i := 0; i < d.GetOptionCount(); i++ {
+			d.SetCurrentOption(i)
+			if _, l := d.GetCurrentOption(); l == "User Service / Users" {
+				break
+			}
+		}
+	})
+	writeShot(t, h, dir, "move", "Move a request")
+	h.key(tcell.KeyEsc, 0, 0)
+
 	// 7. Settings in another theme.
 	g, gws := newApp("Gruvbox Dark")
-	open(g, gws.Collections[1].Requests[0], 7)
+	open(g, reqAt(t, gws, "User Service/Lookup/Get JSON"), 7)
 	g.do(func() { g.a.tv.SetFocus(g.a.themeDrop) })
 	writeShot(t, g, dir, "settings", "Settings (Gruvbox Dark)")
 
 	// 8. Light theme main view.
 	l, lws := newApp("Light")
-	open(l, lws.Collections[1].Requests[3], 3)
+	open(l, reqAt(t, lws, "User Service/Users/Update User"), 3)
 	send(l)
 	writeShot(t, l, dir, "light", "Light theme")
 

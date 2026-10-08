@@ -4,7 +4,7 @@
 
 ```
 cmd/term-rest-client   main: flags, workspace loading, starts the UI or the list/run commands
-internal/models        Workspace, Collection, Request, KeyValue, Auth, Settings, Draft
+internal/models        Workspace, Collection (with nested Folders), Request, ...; tree helpers in tree.go
 internal/storage       JSON workspace file: Load, atomic Save, DefaultPath, SampleWorkspace
 internal/vars          {{name}} substitution and dynamic variables ($uuid, $timestamp, ...)
 internal/engine        Prepare(Request, vars) -> *http.Request (+ missing vars, warnings); Curl()
@@ -50,7 +50,9 @@ A few rules keep keyboard handling predictable:
 
 ## Persistence
 
-The workspace file is written with a temp file and rename, so a crash can't leave a half-written file. It is saved after every collection change, save, settings change, variable capture, when leaving the Variables tab, and on quit. On quit the builder state is stored as `Workspace.Draft` together with the position of the saved request it came from, and restored on the next start.
+The workspace file is written with a temp file and rename, so a crash can't leave a half-written file. It is saved after every collection change, save, settings change, variable capture, when leaving the Variables tab, and on quit. On quit the builder state is stored as `Workspace.Draft` together with the location of the saved request it came from (folder indices from the top plus the request index, see `Workspace.Location`), and restored on the next start.
+
+Collections form a tree: `Collection.Folders` holds nested collections (shown as folders) and `Workspace.Requests` holds top-level requests. Code that needs "the list this item lives in" uses `Workspace.RequestsIn(parent)` / `FoldersIn(parent)`, where a nil parent means the top level, so the same code handles every level.
 
 ## Testing
 

@@ -10,6 +10,11 @@ import (
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 )
 
+// The tree shows top-level collections, their folders (nested to any depth)
+// and requests, followed by requests that are not in any collection. Within
+// a container, folders come before requests. A container is a
+// *models.Collection, or nil for the top level.
+
 func (a *App) buildTree() {
 	a.tree = tview.NewTreeView()
 	a.tree.SetBorder(true).SetTitle(" Collections ").SetBorderPadding(0, 0, 1, 1)
@@ -21,7 +26,8 @@ func (a *App) buildTree() {
 }
 
 // rebuildTree recreates the nodes from the workspace and selects the node
-// whose reference is sel (a *models.Collection or *models.Request).
+// whose reference is sel (a *models.Collection or *models.Request). With sel
+// nil the current selection is kept.
 func (a *App) rebuildTree(sel any) {
 	if sel == nil {
 		if cur := a.tree.GetCurrentNode(); cur != nil {
@@ -31,36 +37,65 @@ func (a *App) rebuildTree(sel any) {
 	root := tview.NewTreeNode("")
 	var selected *tview.TreeNode
 	t := a.theme
-	for _, c := range a.ws.Collections {
+
+	addRequest := func(parent *tview.TreeNode, r *models.Request) {
+		marker := " "
+		if r == a.linked {
+			marker = fmt.Sprintf("[%s]●[-]", t.HexAccent)
+		}
+		rn := tview.NewTreeNode(fmt.Sprintf("%s[%s]%-6s[-] [%s]%s",
+			marker, t.methodColor(r.Method), r.Method, t.HexText, tview.Escape(r.Name))).
+			SetReference(r)
+		a.styleNode(rn)
+		parent.AddChild(rn)
+		if sel == any(r) {
+			selected = rn
+		}
+	}
+	var addCollection func(parent *tview.TreeNode, c *models.Collection, topLevel bool)
+	addCollection = func(parent *tview.TreeNode, c *models.Collection, topLevel bool) {
 		icon := "▾"
 		if a.collapsed[c] {
 			icon = "▸"
 		}
-		cn := tview.NewTreeNode(fmt.Sprintf("[%s]%s[-] [%s::b]%s[-:-:-] [%s](%d)",
-			t.HexMuted, icon, t.HexText, tview.Escape(c.Name), t.HexMuted, len(c.Requests))).
+		style := ""
+		if topLevel {
+			style = "::b"
+		}
+		cn := tview.NewTreeNode(fmt.Sprintf("[%s]%s[-] [%s%s]%s[-:-:-] [%s](%d)",
+			t.HexMuted, icon, t.HexText, style, tview.Escape(c.Name), t.HexMuted, c.CountRequests())).
 			SetReference(c).
 			SetExpanded(!a.collapsed[c])
 		a.styleNode(cn)
-		root.AddChild(cn)
+		parent.AddChild(cn)
 		if sel == any(c) {
 			selected = cn
 		}
+		for _, f := range c.Folders {
+			addCollection(cn, f, false)
+		}
 		for _, r := range c.Requests {
-			marker := " "
-			if r == a.linked {
-				marker = fmt.Sprintf("[%s]●[-]", t.HexAccent)
-			}
-			rn := tview.NewTreeNode(fmt.Sprintf("%s[%s]%-6s[-] [%s]%s",
-				marker, t.methodColor(r.Method), r.Method, t.HexText, tview.Escape(r.Name))).
-				SetReference(r)
-			a.styleNode(rn)
-			cn.AddChild(rn)
-			if sel == any(r) {
-				selected = rn
+			addRequest(cn, r)
+		}
+	}
+	for _, c := range a.ws.Collections {
+		addCollection(root, c, true)
+	}
+	for _, r := range a.ws.Requests {
+		addRequest(root, r)
+	}
+
+	a.tree.SetRoot(root)
+	if selected != nil {
+		// Make sure the selection is visible.
+		for _, c := range a.ancestorsOfRef(selected.GetReference()) {
+			if a.collapsed[c] {
+				delete(a.collapsed, c)
+				a.rebuildTree(sel)
+				return
 			}
 		}
 	}
-	a.tree.SetRoot(root)
 	if selected == nil && len(root.GetChildren()) > 0 {
 		selected = root.GetChildren()[0]
 	}
@@ -68,6 +103,18 @@ func (a *App) rebuildTree(sel any) {
 		a.tree.SetCurrentNode(selected)
 	}
 	a.renderTitles()
+}
+
+func (a *App) ancestorsOfRef(ref any) []*models.Collection {
+	switch x := ref.(type) {
+	case *models.Request:
+		path, _ := a.ws.PathOf(x)
+		return path
+	case *models.Collection:
+		anc, _ := a.ws.AncestorsOf(x)
+		return anc
+	}
+	return nil
 }
 
 func (a *App) styleNode(n *tview.TreeNode) {
@@ -94,7 +141,7 @@ func (a *App) treeSelected(node *tview.TreeNode) {
 	}
 }
 
-// selection returns the collection and request (if any) under the cursor.
+// selection returns the container or request under the cursor.
 func (a *App) selection() (*models.Collection, *models.Request) {
 	node := a.tree.GetCurrentNode()
 	if node == nil {
@@ -104,9 +151,19 @@ func (a *App) selection() (*models.Collection, *models.Request) {
 	case *models.Collection:
 		return ref, nil
 	case *models.Request:
-		return a.ws.CollectionOf(ref), ref
+		return nil, ref
 	}
 	return nil, nil
+}
+
+// targetContainer is where new items go: the selected collection or folder,
+// or the container of the selected request (nil = top level).
+func (a *App) targetContainer() *models.Collection {
+	c, r := a.selection()
+	if r != nil {
+		return a.ws.ParentOf(r)
+	}
+	return c
 }
 
 func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
@@ -129,24 +186,40 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
-	case tcell.KeyLeft, tcell.KeyRight:
-		if c, r := a.selection(); c != nil && r == nil {
-			a.collapsed[c] = ev.Key() == tcell.KeyLeft
+	case tcell.KeyLeft:
+		c, r := a.selection()
+		switch {
+		case c != nil && !a.collapsed[c]:
+			a.collapsed[c] = true
+			a.rebuildTree(c)
+		case r != nil && a.ws.ParentOf(r) != nil:
+			a.rebuildTree(a.ws.ParentOf(r))
+		case c != nil && a.ws.ParentOfCollection(c) != nil:
+			a.rebuildTree(a.ws.ParentOfCollection(c))
+		}
+		return nil
+	case tcell.KeyRight:
+		if c, _ := a.selection(); c != nil && a.collapsed[c] {
+			delete(a.collapsed, c)
 			a.rebuildTree(c)
 			return nil
 		}
 	case tcell.KeyRune:
 		switch ev.Rune() {
 		case 'n':
-			a.newCollection()
+			a.newContainer(nil)
+		case 'f':
+			a.newContainer(a.targetContainer())
 		case 'a', 'r':
-			a.newRequestInCollection()
+			a.newRequestInContainer()
 		case 'e':
 			a.renameSelected()
 		case 'd':
 			a.deleteSelected()
 		case 'c':
 			a.duplicateSelected()
+		case 'm':
+			a.moveSelectedTo()
 		case 'K':
 			a.moveSelected(-1)
 		case 'J':
@@ -163,30 +236,36 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 	return ev
 }
 
-func (a *App) newCollection() {
-	a.prompt("New Collection", "Name", "New Collection", func(name string) {
+// newContainer creates a collection (parent nil) or a folder inside parent.
+func (a *App) newContainer(parent *models.Collection) {
+	title, initial := "New Collection", "New Collection"
+	if parent != nil {
+		title, initial = "New Folder in "+parent.Name, "New Folder"
+	}
+	a.prompt(title, "Name", initial, func(name string) {
 		c := &models.Collection{Name: name}
-		a.ws.Collections = append(a.ws.Collections, c)
+		list := a.ws.FoldersIn(parent)
+		*list = append(*list, c)
+		if parent != nil {
+			delete(a.collapsed, parent)
+		}
 		a.persist()
 		a.rebuildTree(c)
 		a.tv.SetFocus(a.tree)
-		a.setStatus(levelSuccess, "Created collection "+name)
+		a.setStatus(levelSuccess, "Created "+name)
 	})
 }
 
-func (a *App) newRequestInCollection() {
-	c, _ := a.selection()
+func (a *App) newRequestInContainer() {
+	parent := a.targetContainer()
 	a.guardUnsaved(func() {
-		if c == nil {
-			if len(a.ws.Collections) == 0 {
-				a.ws.Collections = append(a.ws.Collections, &models.Collection{Name: "My Collection"})
-			}
-			c = a.ws.Collections[0]
-		}
 		r := models.NewRequest("New Request")
 		ptr := &r
-		c.Requests = append(c.Requests, ptr)
-		a.collapsed[c] = false
+		list := a.ws.RequestsIn(parent)
+		*list = append(*list, ptr)
+		if parent != nil {
+			delete(a.collapsed, parent)
+		}
 		a.persist()
 		a.loadIntoBuilder(r, ptr)
 		a.rebuildTree(ptr)
@@ -215,7 +294,7 @@ func (a *App) renameSelected() {
 			a.tv.SetFocus(a.tree)
 		})
 	case c != nil:
-		a.prompt("Rename Collection", "Name", c.Name, func(name string) {
+		a.prompt("Rename "+a.containerKind(c), "Name", c.Name, func(name string) {
 			c.Name = name
 			a.persist()
 			a.rebuildTree(c)
@@ -224,56 +303,77 @@ func (a *App) renameSelected() {
 	}
 }
 
+func (a *App) containerKind(c *models.Collection) string {
+	if a.ws.ParentOfCollection(c) == nil {
+		return "Collection"
+	}
+	return "Folder"
+}
+
 func (a *App) deleteSelected() {
 	c, r := a.selection()
 	switch {
 	case r != nil:
+		parent := a.ws.ParentOf(r)
 		a.confirm(fmt.Sprintf("Delete request %q?", r.Name), []string{"Delete", "Cancel"}, func(label string) {
 			if label != "Delete" {
 				return
 			}
-			ri := indexOfRequest(c.Requests, r)
-			c.Requests = append(c.Requests[:ri], c.Requests[ri+1:]...)
+			list := a.ws.RequestsIn(parent)
+			i := indexPtr(*list, r)
+			*list = removeAt(*list, i)
 			if a.linked == r {
 				a.linked = nil
 			}
 			a.persist()
-			var next any = c
-			if len(c.Requests) > 0 {
-				next = c.Requests[min(ri, len(c.Requests)-1)]
+			var next any = parent
+			if len(*list) > 0 {
+				next = (*list)[min(i, len(*list)-1)]
 			}
 			a.rebuildTree(next)
 			a.setStatus(levelInfo, "Deleted "+r.Name)
 		})
 	case c != nil:
-		msg := fmt.Sprintf("Delete collection %q", c.Name)
-		if n := len(c.Requests); n > 0 {
-			msg += fmt.Sprintf(" and its %d request(s)", n)
+		kind := strings.ToLower(a.containerKind(c))
+		msg := fmt.Sprintf("Delete %s %q", kind, c.Name)
+		var parts []string
+		if n := len(c.Folders); n > 0 {
+			parts = append(parts, plural(n, "folder"))
 		}
+		if n := c.CountRequests(); n > 0 {
+			parts = append(parts, plural(n, "request"))
+		}
+		if len(parts) > 0 {
+			msg += " with " + strings.Join(parts, " and ")
+		}
+		parent := a.ws.ParentOfCollection(c)
 		a.confirm(msg+"?", []string{"Delete", "Cancel"}, func(label string) {
 			if label != "Delete" {
 				return
 			}
-			ci := 0
-			for i, x := range a.ws.Collections {
-				if x == c {
-					ci = i
-				}
-			}
-			if a.linked != nil && indexOfRequest(c.Requests, a.linked) >= 0 {
+			if a.linked != nil && c.Holds(a.linked) {
 				a.linked = nil
 			}
-			a.ws.Collections = append(a.ws.Collections[:ci], a.ws.Collections[ci+1:]...)
+			list := a.ws.FoldersIn(parent)
+			i := indexPtr(*list, c)
+			*list = removeAt(*list, i)
 			delete(a.collapsed, c)
 			a.persist()
-			var next any
-			if len(a.ws.Collections) > 0 {
-				next = a.ws.Collections[min(ci, len(a.ws.Collections)-1)]
+			var next any = parent
+			if len(*list) > 0 {
+				next = (*list)[min(i, len(*list)-1)]
 			}
 			a.rebuildTree(next)
-			a.setStatus(levelInfo, "Deleted collection "+c.Name)
+			a.setStatus(levelInfo, "Deleted "+c.Name)
 		})
 	}
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func (a *App) duplicateSelected() {
@@ -283,60 +383,155 @@ func (a *App) duplicateSelected() {
 		cp := r.Clone()
 		cp.Name = "Copy of " + r.Name
 		ptr := &cp
-		ri := indexOfRequest(c.Requests, r)
-		c.Requests = append(c.Requests[:ri+1], append([]*models.Request{ptr}, c.Requests[ri+1:]...)...)
+		list := a.ws.RequestsIn(a.ws.ParentOf(r))
+		*list = insertAt(*list, indexPtr(*list, r)+1, ptr)
 		a.persist()
 		a.rebuildTree(ptr)
 		a.setStatus(levelSuccess, "Duplicated "+r.Name)
 	case c != nil:
-		nc := &models.Collection{Name: "Copy of " + c.Name}
-		for _, x := range c.Requests {
-			cp := x.Clone()
-			nc.Requests = append(nc.Requests, &cp)
-		}
-		a.ws.Collections = append(a.ws.Collections, nc)
+		nc := c.Clone()
+		nc.Name = "Copy of " + c.Name
+		list := a.ws.FoldersIn(a.ws.ParentOfCollection(c))
+		*list = insertAt(*list, indexPtr(*list, c)+1, nc)
 		a.persist()
 		a.rebuildTree(nc)
-		a.setStatus(levelSuccess, "Duplicated collection "+c.Name)
+		a.setStatus(levelSuccess, "Duplicated "+c.Name)
 	}
 }
 
+// moveSelected moves the selection up or down within its own list.
 func (a *App) moveSelected(delta int) {
 	c, r := a.selection()
 	switch {
 	case r != nil:
-		i := indexOfRequest(c.Requests, r)
-		j := i + delta
-		if j < 0 || j >= len(c.Requests) {
-			return
+		if swapWith(*a.ws.RequestsIn(a.ws.ParentOf(r)), r, delta) {
+			a.persist()
+			a.rebuildTree(r)
 		}
-		c.Requests[i], c.Requests[j] = c.Requests[j], c.Requests[i]
-		a.persist()
-		a.rebuildTree(r)
 	case c != nil:
-		cols := a.ws.Collections
-		for i := range cols {
-			if cols[i] == c {
-				j := i + delta
-				if j < 0 || j >= len(cols) {
-					return
-				}
-				cols[i], cols[j] = cols[j], cols[i]
-				break
-			}
+		if swapWith(*a.ws.FoldersIn(a.ws.ParentOfCollection(c)), c, delta) {
+			a.persist()
+			a.rebuildTree(c)
 		}
-		a.persist()
-		a.rebuildTree(c)
 	}
 }
 
-func indexOfRequest(list []*models.Request, r *models.Request) int {
-	for i, x := range list {
-		if x == r {
+// moveSelectedTo asks for a destination and moves the selected request or
+// folder there. A folder moved to the top level becomes a collection.
+func (a *App) moveSelectedTo() {
+	c, r := a.selection()
+	if c == nil && r == nil {
+		return
+	}
+	var exclude *models.Collection
+	name := ""
+	current := a.targetContainer()
+	if c != nil {
+		exclude, name = c, c.Name
+		current = a.ws.ParentOfCollection(c)
+	} else {
+		name = r.Name
+	}
+	labels, targets := a.containerChoices(exclude)
+	sel := 0
+	for i, t := range targets {
+		if t == current {
+			sel = i
+		}
+	}
+	dest := tview.NewDropDown().SetLabel("Move to  ").SetOptions(labels, nil).SetCurrentOption(sel)
+	dest.SetTextOptions(" ", " ", "", "", "")
+	submit := func() {
+		i, _ := dest.GetCurrentOption()
+		if i < 0 {
+			return
+		}
+		to := targets[i]
+		a.closeDialog()
+		if c != nil {
+			from := a.ws.FoldersIn(a.ws.ParentOfCollection(c))
+			*from = removeAt(*from, indexPtr(*from, c))
+			list := a.ws.FoldersIn(to)
+			*list = append(*list, c)
+		} else {
+			from := a.ws.RequestsIn(a.ws.ParentOf(r))
+			*from = removeAt(*from, indexPtr(*from, r))
+			list := a.ws.RequestsIn(to)
+			*list = append(*list, r)
+		}
+		if to != nil {
+			delete(a.collapsed, to)
+		}
+		a.persist()
+		if c != nil {
+			a.rebuildTree(c)
+		} else {
+			a.rebuildTree(r)
+		}
+		a.setStatus(levelSuccess, fmt.Sprintf("Moved %s to %s", name, labels[i]))
+	}
+	dest.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyEnter && !dest.IsOpen() {
+			submit()
+			return nil
+		}
+		return ev
+	})
+	a.formDialog("Move "+name, "Enter to move · Esc to cancel", []tview.Primitive{dest}, submit, 70)
+}
+
+// containerChoices lists every place requests or folders can go: the top
+// level and each collection/folder path. Containers inside exclude (and
+// exclude itself) are left out, so a folder can't be moved into itself.
+func (a *App) containerChoices(exclude *models.Collection) ([]string, []*models.Collection) {
+	labels := []string{topLevelLabel}
+	targets := []*models.Collection{nil}
+	a.ws.WalkCollections(func(anc []*models.Collection, c *models.Collection) {
+		if exclude != nil && a.ws.IsWithin(c, exclude) {
+			return
+		}
+		labels = append(labels, models.PathName(append(append([]*models.Collection(nil), anc...), c)))
+		targets = append(targets, c)
+	})
+	return labels, targets
+}
+
+const topLevelLabel = "(top level, no collection)"
+
+func indexPtr[T comparable](list []T, x T) int {
+	for i, y := range list {
+		if y == x {
 			return i
 		}
 	}
 	return -1
+}
+
+func removeAt[T any](list []T, i int) []T {
+	if i < 0 || i >= len(list) {
+		return list
+	}
+	return append(list[:i:i], list[i+1:]...)
+}
+
+func insertAt[T any](list []T, i int, x T) []T {
+	if i < 0 || i > len(list) {
+		i = len(list)
+	}
+	out := make([]T, 0, len(list)+1)
+	out = append(out, list[:i]...)
+	out = append(out, x)
+	return append(out, list[i:]...)
+}
+
+func swapWith[T comparable](list []T, x T, delta int) bool {
+	i := indexPtr(list, x)
+	j := i + delta
+	if i < 0 || j < 0 || j >= len(list) {
+		return false
+	}
+	list[i], list[j] = list[j], list[i]
+	return true
 }
 
 // suggestName derives a request name from the URL path.

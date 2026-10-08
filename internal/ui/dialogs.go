@@ -221,7 +221,7 @@ func (a *App) guardUnsaved(then func()) {
 
 // save writes the builder back to its saved request, or asks where to save it.
 func (a *App) save() {
-	if a.linked == nil || a.ws.CollectionOf(a.linked) == nil {
+	if a.linked == nil || !a.ws.Contains(a.linked) {
 		a.saveAs()
 		return
 	}
@@ -239,56 +239,63 @@ func (a *App) saveAs() {
 		name = suggestName(a.req)
 	}
 	const newLabel = "+ New collection"
-	var options []string
-	sel := 0
-	cur := a.ws.CollectionOf(a.linked)
-	if cur == nil {
-		cur, _ = a.selection()
+	labels, targets := a.containerChoices(nil)
+	labels = append(labels, newLabel)
+	var cur *models.Collection
+	if a.linked != nil && a.ws.Contains(a.linked) {
+		cur = a.ws.ParentOf(a.linked)
+	} else {
+		cur = a.targetContainer()
 	}
-	for i, c := range a.ws.Collections {
-		options = append(options, c.Name)
-		if c == cur {
+	sel := 0
+	for i, t := range targets {
+		if t == cur {
 			sel = i
 		}
 	}
-	options = append(options, newLabel)
 
 	nameInput := tview.NewInputField().SetLabel("Name            ").SetText(name)
-	colDrop := tview.NewDropDown().SetLabel("Collection      ").SetOptions(options, nil).SetCurrentOption(sel)
-	colDrop.SetTextOptions(" ", " ", "", "", "")
+	locDrop := tview.NewDropDown().SetLabel("Save in         ").SetOptions(labels, nil).SetCurrentOption(sel)
+	locDrop.SetTextOptions(" ", " ", "", "", "")
 	newCol := tview.NewInputField().SetLabel("New collection  ").SetPlaceholder("used with \"" + newLabel + "\"")
 	submit := func() {
 		n := strings.TrimSpace(nameInput.GetText())
 		if n == "" {
 			return
 		}
-		idx, _ := colDrop.GetCurrentOption()
-		var col *models.Collection
-		if idx >= 0 && idx < len(a.ws.Collections) {
-			col = a.ws.Collections[idx]
+		idx, _ := locDrop.GetCurrentOption()
+		var parent *models.Collection
+		if idx >= 0 && idx < len(targets) {
+			parent = targets[idx]
 		} else {
 			cn := strings.TrimSpace(newCol.GetText())
 			if cn == "" {
 				cn = "My Collection"
 			}
-			col = &models.Collection{Name: cn}
-			a.ws.Collections = append(a.ws.Collections, col)
+			parent = &models.Collection{Name: cn}
+			a.ws.Collections = append(a.ws.Collections, parent)
 		}
 		a.closeDialog()
 		r := a.req.Clone()
 		r.Name = n
 		ptr := &r
-		col.Requests = append(col.Requests, ptr)
-		a.collapsed[col] = false
+		list := a.ws.RequestsIn(parent)
+		*list = append(*list, ptr)
+		where := topLevelLabel
+		if parent != nil {
+			delete(a.collapsed, parent)
+			anc, _ := a.ws.AncestorsOf(parent)
+			where = models.PathName(append(anc, parent))
+		}
 		a.req.Name = n
 		a.linked = ptr
 		if a.persist() {
-			a.setStatus(levelSuccess, fmt.Sprintf("Saved %s to %s", n, col.Name))
+			a.setStatus(levelSuccess, fmt.Sprintf("Saved %s to %s", n, where))
 		}
 		a.rebuildTree(ptr)
 	}
 	a.formDialog("Save Request As", "Enter to save · Tab to move · Esc to cancel",
-		[]tview.Primitive{nameInput, colDrop, newCol}, submit, 66)
+		[]tview.Primitive{nameInput, locDrop, newCol}, submit, 72)
 }
 
 // newRequest clears the builder for a fresh, unsaved request.

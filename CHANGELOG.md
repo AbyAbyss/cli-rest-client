@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Folders inside collections, nested to any depth, and requests at the top level outside
+  any collection (like Postman). New tree keys: `f` new folder, `m` move to another
+  collection/folder/top level; `Left` on a request jumps to its folder.
+- Save As can save into any folder or the top level; the request title shows the full path.
+- `list` prints full paths and `run` accepts folder paths (runs everything inside).
+- Workspace file version 2 (`folders` and top-level `requests`). Version 1 files load
+  as before and the saved draft link is migrated.
 - Params, Auth, Headers, Body, Pre-request and Tests tabs now work (they were placeholders).
 - Auth: Basic, Bearer token and API key (header or query parameter).
 - Body types: JSON, text, XML and form-urlencoded, with automatic `Content-Type`.

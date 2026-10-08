@@ -120,10 +120,13 @@ func kvEqual(a, b []KeyValue) bool {
 	return true
 }
 
-// Collection is a named group of requests.
+// Collection is a named group of requests and sub-folders. A top-level
+// Collection is shown as a collection; nested ones are folders. Folders can
+// be nested to any depth.
 type Collection struct {
-	Name     string     `json:"name"`
-	Requests []*Request `json:"requests"`
+	Name     string        `json:"name"`
+	Folders  []*Collection `json:"folders,omitempty"`
+	Requests []*Request    `json:"requests"`
 }
 
 // Settings are user preferences.
@@ -137,52 +140,78 @@ type Settings struct {
 // Draft is the unsaved builder state, restored on the next start.
 type Draft struct {
 	Request Request `json:"request"`
-	// Collection and Index point at the saved request the draft was loaded
-	// from, or are -1 when the draft is not linked to a saved request.
-	Collection int `json:"collection"`
-	Index      int `json:"index"`
+	// Folders and Index locate the saved request the draft was loaded from
+	// (see Workspace.Location). Index is -1 when the draft is not linked.
+	Folders []int `json:"folders,omitempty"`
+	Index   int   `json:"index"`
+	// Collection is the version 1 location (top-level collection index),
+	// read for migration only.
+	Collection int `json:"collection,omitempty"`
 }
 
 // Workspace is everything persisted between runs.
 type Workspace struct {
 	Version     int           `json:"version"`
 	Collections []*Collection `json:"collections"`
-	Variables   []KeyValue    `json:"variables,omitempty"`
-	Settings    Settings      `json:"settings"`
-	Draft       *Draft        `json:"draft,omitempty"`
+	// Requests are saved requests that are not in any collection.
+	Requests  []*Request `json:"requests,omitempty"`
+	Variables []KeyValue `json:"variables,omitempty"`
+	Settings  Settings   `json:"settings"`
+	Draft     *Draft     `json:"draft,omitempty"`
 }
 
 // CurrentVersion is the workspace file format version.
-const CurrentVersion = 1
+// Version 2 added folders, top-level requests and Draft.Folders.
+const CurrentVersion = 2
 
-// Normalize fills in defaults after loading.
+// Normalize fills in defaults after loading and migrates older files.
 func (w *Workspace) Normalize() {
-	if w.Version == 0 {
-		w.Version = CurrentVersion
-	}
 	if w.Settings.TimeoutSeconds <= 0 {
 		w.Settings.TimeoutSeconds = 30
 	}
-	cols := w.Collections[:0]
-	for _, c := range w.Collections {
+	w.Collections = normalizeCollections(w.Collections)
+	w.Requests = normalizeRequests(w.Requests)
+	if d := w.Draft; d != nil {
+		d.Request.Normalize()
+		if w.Version < 2 {
+			// v1: Collection/Index; -1/-1 meant "not linked".
+			if d.Collection >= 0 && d.Index >= 0 {
+				d.Folders = []int{d.Collection}
+			} else {
+				d.Folders, d.Index = nil, -1
+			}
+			d.Collection = 0
+		}
+	}
+	w.Version = CurrentVersion
+}
+
+func normalizeCollections(cols []*Collection) []*Collection {
+	out := cols[:0]
+	for _, c := range cols {
 		if c == nil {
 			continue
 		}
-		reqs := c.Requests[:0]
-		for _, r := range c.Requests {
-			if r == nil {
-				continue
-			}
-			r.Normalize()
-			reqs = append(reqs, r)
+		c.Folders = normalizeCollections(c.Folders)
+		c.Requests = normalizeRequests(c.Requests)
+		out = append(out, c)
+	}
+	return out
+}
+
+func normalizeRequests(reqs []*Request) []*Request {
+	out := reqs[:0]
+	for _, r := range reqs {
+		if r == nil {
+			continue
 		}
-		c.Requests = reqs
-		cols = append(cols, c)
+		r.Normalize()
+		out = append(out, r)
 	}
-	w.Collections = cols
-	if w.Draft != nil {
-		w.Draft.Request.Normalize()
+	if len(out) == 0 {
+		return nil
 	}
+	return out
 }
 
 // VariableMap returns the enabled variables as a map.
@@ -217,25 +246,4 @@ func (w *Workspace) UnsetVariable(key string) {
 		}
 	}
 	w.Variables = out
-}
-
-// Locate returns the collection and request index of r, or -1, -1.
-func (w *Workspace) Locate(r *Request) (int, int) {
-	for ci, c := range w.Collections {
-		for ri, x := range c.Requests {
-			if x == r {
-				return ci, ri
-			}
-		}
-	}
-	return -1, -1
-}
-
-// CollectionOf returns the collection holding r, or nil.
-func (w *Workspace) CollectionOf(r *Request) *Collection {
-	ci, _ := w.Locate(r)
-	if ci < 0 {
-		return nil
-	}
-	return w.Collections[ci]
 }
