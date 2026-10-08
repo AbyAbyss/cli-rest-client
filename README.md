@@ -5,21 +5,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
 
-```
-┌────────── Collections ─────────┐┌─ Method ──┐╔═══════════ User Service / Create User ════════════╗
-│ ▾ Auth API (2)                 ││POST       │║ {{baseUrl}}/post                                  ║   SEND
-│ ├── GET    Login               │└───────────┘╚═══════════════════════════════════════════════════╝
-│ └── GET    Bearer Token        │ 1 Params   2 Auth   3 Headers   4 Body •   5 Pre-request   6 Tests •  ...
-│ ▾ User Service (6)             │Body type JSON                    ┌──────── Response · 200 ─────────┐
-│ ├── GET    Get JSON            │┌────────── Body · JSON ─────────┐│ POST https://httpbin.org/post   │
-│ ├── GET    Query Params        ││ {                              ││                                 │
-│ ├──●POST   Create User         ││   "name": "Aby",               ││ 200 OK   Time 412 ms   Size 1 KB│
-│ ├── PUT    Update User         ││   "role": "admin",             ││                                 │
-│ ├── POST   Form Login          ││   "createdAt": {{$timestamp}}  ││ Tests 2/2 passed                │
-│ └── DELETE Delete User         ││ }                              ││   ✓ status == 200               │
-│ ▾ Payment Gateway (1)          ││                                ││   ✓ json.json.name == Aby       │
-│ └── POST   Charge              ││                                ││   → lastUser = "Aby"            │
-```
+![Term REST Client: request builder, JSON body and response with passing tests](assets/screenshots/main.png)
 
 ## Features
 
@@ -35,6 +21,19 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
 - **Headless mode**: `term-rest-client run "Collection/Request"` sends saved requests, prints results and exits non-zero when a test fails.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Query params with variables](assets/screenshots/params.png) | ![Bearer token auth](assets/screenshots/auth.png) |
+| **Query params and headers** with `{{variables}}` and a generated `{{$uuid}}` | **Auth tab**: Basic, Bearer or API key |
+| ![Pre-request script and tests](assets/screenshots/tests.png) | ![Save request dialog](assets/screenshots/save.png) |
+| **Tests**: each line passes or fails with the actual value | **Save as**: pick a name and collection |
+| ![Keyboard shortcuts](assets/screenshots/help.png) | ![Settings in the Gruvbox Dark theme](assets/screenshots/settings.png) |
+| **F1** shows every shortcut | **Settings** with the Gruvbox Dark theme |
+| ![Light theme](assets/screenshots/light.png) | ![Command-line mode](assets/screenshots/cli.png) |
+| **Light** theme | **`run` from the command line**, usable in CI |
 
 ## Quick Start
 
@@ -303,7 +302,10 @@ make test     # go test ./...
 make vet
 make fmt
 make lint     # needs golangci-lint
+make screenshots  # regenerate assets/screenshots (needs Node + Playwright)
 ```
+
+The screenshots are generated, not hand-made: `make screenshots` drives the real UI on a simulated terminal against a local httpbin clone, writes each frame as HTML with the exact colors the app drew, and Playwright turns those into PNGs. Rerun it after UI changes.
 
 The UI tests drive the real application through tcell's simulation screen (typing, tab switching, saving, sending to a local test server), so `go test ./...` covers the interface as well as the HTTP and scripting code.
 

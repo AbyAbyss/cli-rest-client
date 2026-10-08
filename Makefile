@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage vet clean fmt lint install uninstall build-mac-universal deps update-deps build-all build-linux build-windows build-darwin help
+.PHONY: build run test test-coverage vet clean fmt lint install uninstall build-mac-universal screenshots deps update-deps build-all build-linux build-windows build-darwin help
 
 # Application name
 APP_NAME := term-rest-client
@@ -78,6 +78,11 @@ build-mac-universal: ## Build one macOS binary for Intel and Apple Silicon (need
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GOBUILD) -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP_NAME)-darwin-arm64 ./$(CMD_DIR)
 	lipo -create -output $(DIST_DIR)/$(APP_NAME)-darwin-universal $(DIST_DIR)/$(APP_NAME)-darwin-amd64 $(DIST_DIR)/$(APP_NAME)-darwin-arm64
 	@echo "Built $(DIST_DIR)/$(APP_NAME)-darwin-universal"
+
+screenshots: ## Regenerate assets/screenshots/*.png (needs Node + Playwright)
+	@rm -rf $(DIST_DIR)/screenshots
+	SCREENSHOT_DIR=$(CURDIR)/$(DIST_DIR)/screenshots $(GOTEST) -tags screenshots -run TestScreenshots -count=1 ./internal/ui/
+	NODE_PATH=$$(npm root -g) node scripts/screenshots.cjs $(DIST_DIR)/screenshots assets/screenshots
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."

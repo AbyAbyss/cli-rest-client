@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (macOS and Linux, with shell-specific PATH hints and a Go version check),
   `make build-mac-universal`, and linux/arm64 builds.
 - Headless `list` and `run` commands with test-based exit codes, plus `-version`.
+- README screenshots generated from the real UI (`make screenshots`).
 - Test suite covering the engine, scripting, storage, CLI and the UI (simulated terminal).
 
 ### Changed
@@ -43,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Status line printed the code twice ("200 200 OK").
 - Collections and edits were lost on exit.
 - The method dropdown could not be reached with `Tab`.
+- Dialog backgrounds let the screen underneath show through between fields.
 - Makefile `build` target mixed Windows `cmd` syntax into a shell recipe.
 
 ## [0.1.0] - 2024-XX-XX

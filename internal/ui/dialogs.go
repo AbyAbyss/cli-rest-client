@@ -38,6 +38,31 @@ func (a *App) closeDialog() {
 	}
 }
 
+// panel is a Flex that paints its background. tview's Flex leaves its
+// background untouched, so in a dialog the screen underneath would show
+// through the gaps between items.
+type panel struct {
+	*tview.Flex
+	bg tcell.Color
+}
+
+func newPanel(bg tcell.Color) *panel {
+	p := &panel{Flex: tview.NewFlex(), bg: bg}
+	p.SetBackgroundColor(bg)
+	return p
+}
+
+func (p *panel) Draw(screen tcell.Screen) {
+	x, y, w, h := p.GetRect()
+	style := tcell.StyleDefault.Background(p.bg)
+	for row := y; row < y+h; row++ {
+		for col := x; col < x+w; col++ {
+			screen.SetContent(col, row, ' ', nil, style)
+		}
+	}
+	p.Flex.Draw(screen)
+}
+
 // formDialog shows input widgets stacked vertically. Tab/Shift+Tab move
 // between them, Enter in a text field calls submit, Esc cancels. tview.Form
 // is deliberately not used: it moves focus to its next item after Enter,
@@ -48,8 +73,8 @@ func (a *App) formDialog(title, hint string, items []tview.Primitive, submit fun
 	label := tcell.StyleDefault.Background(t.Input).Foreground(t.Muted)
 	active := tcell.StyleDefault.Background(t.Button).Foreground(t.ButtonText)
 
-	box := tview.NewFlex().SetDirection(tview.FlexRow)
-	box.SetBackgroundColor(t.Input)
+	box := newPanel(t.Input)
+	box.SetDirection(tview.FlexRow)
 	box.SetBorder(true).SetBorderColor(t.Focus).SetTitleColor(t.Title).SetBorderPadding(1, 0, 2, 2)
 	box.SetTitle(" " + title + " ")
 	for _, p := range items {
