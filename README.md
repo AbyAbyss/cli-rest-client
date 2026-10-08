@@ -14,13 +14,13 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Variables**: `{{name}}` works in the URL, params, headers, auth fields and body. Built-ins: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`.
 - **Pre-request scripts**: `set name = value` / `unset name` before a request is sent.
 - **Tests**: one assertion per line (`status == 200`, `json.items[0].id exists`, `time < 500` ...), plus `set token = json.token` to capture values for the next request.
-- **Collections**: create, rename, duplicate, reorder and delete collections and requests. Everything is saved to a JSON file automatically.
+- **Collections and folders, like Postman**: group requests into collections, folders inside collections, and folders inside folders to any depth. Requests can also live at the top level. Create, rename, duplicate, reorder, move and delete anything. Everything is saved to a JSON file automatically.
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
 - **Response viewer**: status, timing, size, sorted headers, pretty-printed and colour-highlighted JSON, test results. Press `s` to save the body to a file.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
-- **Headless mode**: `term-rest-client run "Collection/Request"` sends saved requests, prints results and exits non-zero when a test fails.
+- **Headless mode**: `term-rest-client run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
 
 ## Screenshots
 
@@ -34,6 +34,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **F1** shows every shortcut | **Settings** with the Gruvbox Dark theme |
 | ![Light theme](assets/screenshots/light.png) | ![Command-line mode](assets/screenshots/cli.png) |
 | **Light** theme | **`run` from the command line**, usable in CI |
+| ![Moving a request into another folder](assets/screenshots/move.png) | |
+| **Folders**: nest them as deep as you like, and press `m` to move a request or folder | |
 
 ## Quick Start
 
@@ -200,14 +202,42 @@ In the **Collections tree**:
 
 | Keys | Action |
 |------|--------|
-| `Enter`, `Space` | Open a request, or expand / collapse a collection |
-| `Left` / `Right` | Collapse / expand a collection |
-| `n` | New collection |
-| `a` (or `r`) | New request in the selected collection |
+| `Enter`, `Space` | Open a request, or expand / collapse a collection or folder |
+| `Left` / `Right` | Collapse / expand. `Left` on a request jumps to its folder |
+| `n` | New collection (top level) |
+| `f` | New folder inside the selected collection or folder (or the folder of the selected request) |
+| `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
+| `m` | Move the selected request or folder to another collection, folder, or the top level |
 | `e` (or `F2`) | Rename |
-| `c` | Duplicate |
-| `d` (or `Delete`) | Delete, after confirmation. Deleting a collection deletes its requests |
-| `Shift+Up` / `Shift+Down`, `K` / `J` | Move up / down |
+| `c` | Duplicate. Folders are copied with everything inside |
+| `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
+| `Shift+Up` / `Shift+Down`, `K` / `J` | Move up / down within the same folder |
+
+### Organising requests
+
+The tree works like Postman's sidebar:
+
+```
+▾ User Service             collection
+  ▾ Users                  folder
+    ▾ Admin                folder inside a folder
+        DELETE Delete User
+      POST   Create User
+      PUT    Update User
+  ▾ Lookup
+      GET    Get JSON
+    POST   Form Login      request directly in the collection
+▾ Payment Gateway
+  ▾ Charges
+      POST   Charge
+  GET    Health Check      top-level request, not in any collection
+```
+
+- Inside each collection or folder, sub-folders are listed first, then requests.
+- The request title above the URL shows the full path, for example `User Service / Users / Create User`, so you always know which API you're editing.
+- Counts next to a collection or folder include everything in its sub-folders.
+- **Save As** (`Alt+S`, or `Ctrl+S` on a new request) lets you pick any collection or folder, the top level, or a new collection.
+- A folder moved to the top level with `m` becomes a collection, and a collection moved into another one becomes a folder.
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
 
@@ -253,12 +283,14 @@ Subjects: `status`, `time`, `size`, `body`, `header <Name>`, `json.<path>`. Oper
 
 ```bash
 term-rest-client list                                   # list saved requests
-term-rest-client run "User Service/Get JSON"            # one request
+term-rest-client run "User Service/Lookup/Get JSON"     # one request, by its full path
+term-rest-client run "User Service/Users"               # everything in a folder, sub-folders included
 term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
+term-rest-client run "Health Check"                     # a top-level request
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-`run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-v` also prints response headers and bodies. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-v` also prints response headers and bodies. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
 
 ## Where data is stored
 

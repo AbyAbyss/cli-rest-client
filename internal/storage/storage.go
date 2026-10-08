@@ -119,13 +119,31 @@ func SampleWorkspace() *models.Workspace {
 	charge.PreRequest = "# runs before the request is sent\nset orderId = order-{{$randomInt}}"
 	charge.Tests = "status == 200\ntime < 5000\njson.json.orderId == {{orderId}}"
 
+	health := req("Health Check", "GET", "{{baseUrl}}/get", models.BodyNone, "")
+	health.Tests = "status == 200\ntime < 2000"
+
 	ws := &models.Workspace{
 		Version: models.CurrentVersion,
 		Collections: []*models.Collection{
 			{Name: "Auth API", Requests: []*models.Request{login, bearer}},
-			{Name: "User Service", Requests: []*models.Request{getAll, search, create, update, form, remove}},
-			{Name: "Payment Gateway", Requests: []*models.Request{charge}},
+			{
+				Name: "User Service",
+				Folders: []*models.Collection{
+					{
+						Name:     "Users",
+						Folders:  []*models.Collection{{Name: "Admin", Requests: []*models.Request{remove}}},
+						Requests: []*models.Request{create, update},
+					},
+					{Name: "Lookup", Requests: []*models.Request{getAll, search}},
+				},
+				Requests: []*models.Request{form},
+			},
+			{
+				Name:    "Payment Gateway",
+				Folders: []*models.Collection{{Name: "Charges", Requests: []*models.Request{charge}}},
+			},
 		},
+		Requests: []*models.Request{health},
 		Variables: []models.KeyValue{
 			{Key: "baseUrl", Value: "https://httpbin.org"},
 			{Key: "token", Value: "my-secret-token"},

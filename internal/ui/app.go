@@ -354,30 +354,34 @@ func (a *App) persist() bool {
 }
 
 func (a *App) saveDraft() {
-	ci, ri := -1, -1
+	d := &models.Draft{Request: a.req.Clone(), Index: -1}
 	if a.linked != nil {
-		ci, ri = a.ws.Locate(a.linked)
+		if folders, index, ok := a.ws.Location(a.linked); ok {
+			d.Folders, d.Index = folders, index
+		}
 	}
-	a.ws.Draft = &models.Draft{Request: a.req.Clone(), Collection: ci, Index: ri}
+	a.ws.Draft = d
 	a.persist()
 }
 
 func (a *App) restoreDraft() {
 	if d := a.ws.Draft; d != nil {
 		var linked *models.Request
-		if d.Collection >= 0 && d.Collection < len(a.ws.Collections) {
-			c := a.ws.Collections[d.Collection]
-			if d.Index >= 0 && d.Index < len(c.Requests) {
-				linked = c.Requests[d.Index]
-			}
+		if d.Index >= 0 {
+			linked = a.ws.AtLocation(d.Folders, d.Index)
 		}
 		a.loadIntoBuilder(d.Request, linked)
 		return
 	}
 	// First run: open the first saved request so there is something to send.
-	if len(a.ws.Collections) > 0 && len(a.ws.Collections[0].Requests) > 0 {
-		r := a.ws.Collections[0].Requests[0]
-		a.loadIntoBuilder(*r, r)
+	var first *models.Request
+	a.ws.WalkRequests(func(_ []*models.Collection, r *models.Request) {
+		if first == nil {
+			first = r
+		}
+	})
+	if first != nil {
+		a.loadIntoBuilder(*first, first)
 		return
 	}
 	a.loadIntoBuilder(models.NewRequest(""), nil)

@@ -16,7 +16,8 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil || !created || len(ws.Collections) == 0 {
 		t.Fatalf("missing file should give the sample workspace: %v %v", created, err)
 	}
-	ws.Draft = &models.Draft{Request: *ws.Collections[0].Requests[0], Collection: 0, Index: 0}
+	folders, index, _ := ws.Location(ws.Collections[2].Folders[0].Requests[0])
+	ws.Draft = &models.Draft{Request: *ws.Collections[2].Folders[0].Requests[0], Folders: folders, Index: index}
 	if err := s.Save(ws); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +28,7 @@ func TestRoundTrip(t *testing.T) {
 	if len(got.Collections) != len(ws.Collections) || !got.Collections[0].Requests[0].Equal(*ws.Collections[0].Requests[0]) {
 		t.Fatalf("round trip mismatch")
 	}
-	if got.Draft == nil || got.Draft.Request.Name != ws.Draft.Request.Name {
+	if got.Draft == nil || got.Draft.Request.Name != ws.Draft.Request.Name || got.AtLocation(got.Draft.Folders, got.Draft.Index).Name != "Charge" {
 		t.Fatalf("draft lost")
 	}
 	entries, _ := os.ReadDir(filepath.Dir(path))

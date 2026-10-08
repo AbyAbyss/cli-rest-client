@@ -571,8 +571,11 @@ func (a *App) renderTitles() {
 	}
 	where := "Unsaved request"
 	if a.linked != nil {
-		if c := a.ws.CollectionOf(a.linked); c != nil {
-			where = c.Name + " / " + a.linked.Name
+		if path, ok := a.ws.PathOf(a.linked); ok {
+			where = a.linked.Name
+			if len(path) > 0 {
+				where = models.PathName(path) + " / " + where
+			}
 		}
 	}
 	dirty := ""

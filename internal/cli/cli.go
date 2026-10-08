@@ -17,14 +17,24 @@ import (
 	"github.com/AbyAbyss/cli-rest-client/pkg/httpclient"
 )
 
-// List prints every saved request as "Collection/Request".
+// List prints every saved request as "Collection/Folder/Request" (top-level
+// requests have no prefix).
 func List(out io.Writer, ws *models.Workspace) int {
-	for _, c := range ws.Collections {
-		for _, r := range c.Requests {
-			fmt.Fprintf(out, "%-7s %s/%s\n", r.Method, c.Name, r.Name)
-		}
-	}
+	ws.WalkRequests(func(path []*models.Collection, r *models.Request) {
+		fmt.Fprintf(out, "%-7s %s\n", r.Method, joinPath(path, r.Name))
+	})
 	return 0
+}
+
+func joinPath(path []*models.Collection, name string) string {
+	parts := make([]string, 0, len(path)+1)
+	for _, c := range path {
+		parts = append(parts, c.Name)
+	}
+	if name != "" {
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, "/")
 }
 
 type setFlags map[string]string
@@ -39,8 +49,9 @@ func (s setFlags) Set(v string) error {
 	return nil
 }
 
-// Run sends the named requests in order. A name is "Collection/Request" or
-// just "Collection" for all of its requests (case-insensitive). It returns 1
+// Run sends the named requests in order. A name is a request path such as
+// "Collection/Folder/Request", or a collection or folder path for every
+// request inside it, sub-folders included (case-insensitive). It returns 1
 // if any request errors or any test fails.
 func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
@@ -52,7 +63,7 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		return 2
 	}
 	if fs.NArg() == 0 {
-		fmt.Fprintln(errOut, "run: name at least one request, e.g. \"User Service/Get JSON\" (see the list command)")
+		fmt.Fprintln(errOut, "run: name at least one request or folder, e.g. \"User Service/Lookup/Get JSON\" (see the list command)")
 		return 2
 	}
 
@@ -171,18 +182,25 @@ func apply(ws *models.Workspace, as []script.Assignment, overrides map[string]st
 	return changed
 }
 
+// find resolves a request path, or a collection/folder path to all the
+// requests under it. Request paths win over folder paths with the same name.
 func find(ws *models.Workspace, name string) []*models.Request {
-	for _, c := range ws.Collections {
-		if strings.EqualFold(c.Name, name) {
-			return append([]*models.Request(nil), c.Requests...)
+	name = strings.Trim(strings.TrimSpace(name), "/")
+	var exact, under []*models.Request
+	ws.WalkRequests(func(path []*models.Collection, r *models.Request) {
+		if strings.EqualFold(joinPath(path, r.Name), name) {
+			exact = append(exact, r)
+			return
 		}
-	}
-	for _, c := range ws.Collections {
-		for _, r := range c.Requests {
-			if strings.EqualFold(c.Name+"/"+r.Name, name) {
-				return []*models.Request{r}
+		for i := range path {
+			if strings.EqualFold(joinPath(path[:i+1], ""), name) {
+				under = append(under, r)
+				return
 			}
 		}
+	})
+	if len(exact) > 0 {
+		return exact[:1]
 	}
-	return nil
+	return under
 }
