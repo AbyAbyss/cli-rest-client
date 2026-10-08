@@ -1,0 +1,413 @@
+// Package ui implements the terminal user interface.
+package ui
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/AbyAbyss/cli-rest-client/internal/models"
+	"github.com/AbyAbyss/cli-rest-client/internal/storage"
+)
+
+// BuildInfo is shown in the Settings tab.
+type BuildInfo struct {
+	Version   string
+	BuildTime string
+}
+
+// tab is one entry in the request tab bar.
+type tab struct {
+	name  string
+	page  tview.Primitive
+	focus func() []tview.Primitive
+	// wide tabs hide the response pane.
+	wide bool
+}
+
+// App is the running user interface.
+type App struct {
+	tv    *tview.Application
+	pages *tview.Pages
+	ws    *models.Workspace
+	store *storage.Store
+	info  BuildInfo
+	theme *Theme
+
+	// req is the request being edited in the builder. linked points at the
+	// saved request it was loaded from, or is nil for an unsaved request.
+	req     models.Request
+	linked  *models.Request
+	loading bool
+
+	// Layout.
+	main       *tview.Flex
+	rightCol   *tview.Flex
+	contentRow *tview.Flex
+	tree       *tview.TreeView
+	methodDrop *tview.DropDown
+	urlInput   *tview.InputField
+	sendBtn    *tview.Button
+	tabBar     *tview.TextView
+	tabPages   *tview.Pages
+	tabs       []*tab
+	activeTab  int
+	response   *tview.TextView
+	statusMsg  *tview.TextView
+	statusKeys *tview.TextView
+
+	// Tab editors.
+	paramsArea, headersArea, bodyArea, preArea, testsArea, varsArea *tview.TextArea
+	bodyType                                                        *tview.DropDown
+	authType, authIn                                                *tview.DropDown
+	authUser, authPass, authToken, authKey, authValue               *tview.InputField
+	authFields                                                      *tview.Flex
+	themeDrop                                                       *tview.DropDown
+	timeoutInput                                                    *tview.InputField
+	redirectsBox, insecureBox                                       *tview.Checkbox
+	settingsInfo                                                    *tview.TextView
+
+	// Theming: every primitive registered here is restyled on theme change,
+	// renderers regenerate text that embeds color tags.
+	themed    []tview.Primitive
+	bordered  []borderBox
+	renderers []func()
+
+	// Request execution.
+	result  *sendResult
+	sending bool
+	cancel  context.CancelFunc
+
+	dialogs   []dialog
+	collapsed map[*models.Collection]bool
+
+	status      string
+	statusLevel int
+}
+
+type borderBox interface {
+	tview.Primitive
+	SetBorderColor(tcell.Color) *tview.Box
+}
+
+type dialog struct {
+	name string
+	prev tview.Primitive
+}
+
+// New builds the UI for ws. Changes are persisted through store.
+func New(ws *models.Workspace, store *storage.Store, info BuildInfo) *App {
+	theme, _ := themeByName(ws.Settings.Theme)
+	a := &App{
+		tv:        tview.NewApplication(),
+		ws:        ws,
+		store:     store,
+		info:      info,
+		theme:     theme,
+		collapsed: map[*models.Collection]bool{},
+	}
+	a.setGlobalStyles()
+	a.build()
+	a.restoreDraft()
+	a.applyTheme()
+	a.rebuildTree(a.linked)
+	a.renderResponse()
+	a.setStatus(levelInfo, "Ready. Press F1 for help.")
+	return a
+}
+
+// Application exposes the tview application (used by tests).
+func (a *App) Application() *tview.Application { return a.tv }
+
+// Run starts the event loop and blocks until the user quits.
+func (a *App) Run() error {
+	a.tv.EnableMouse(true)
+	a.tv.EnablePaste(true)
+	return a.tv.Run()
+}
+
+func (a *App) build() {
+	a.buildTree()
+	a.buildRequestBar()
+	a.buildTabs()
+	a.buildResponse()
+	a.buildStatusBar()
+
+	a.contentRow = tview.NewFlex().
+		AddItem(a.tabPages, 0, 1, false).
+		AddItem(a.response, 0, 1, false)
+
+	a.rightCol = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(tview.NewFlex().
+			AddItem(a.methodDrop, 13, 0, false).
+			AddItem(a.urlInput, 0, 1, true).
+			AddItem(a.sendBtn, 10, 0, false), 3, 0, true).
+		AddItem(a.tabBar, 1, 0, false).
+		AddItem(a.contentRow, 0, 1, false)
+
+	body := tview.NewFlex().
+		AddItem(a.tree, 34, 0, false).
+		AddItem(a.rightCol, 0, 1, true)
+
+	status := tview.NewFlex().
+		AddItem(a.statusMsg, 0, 1, false).
+		AddItem(a.statusKeys, 58, 0, false)
+
+	a.main = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(body, 0, 1, true).
+		AddItem(status, 1, 0, false)
+
+	a.pages = tview.NewPages().AddPage("main", a.main, true, true)
+	a.themed = append(a.themed, a.contentRow, a.rightCol, body, status, a.main, a.pages,
+		a.rightCol.GetItem(0))
+	a.unfocusable(a.statusMsg)
+	a.unfocusable(a.statusKeys)
+
+	a.tv.SetRoot(a.pages, true)
+	a.tv.SetInputCapture(a.handleKey)
+	a.tv.SetBeforeDrawFunc(func(tcell.Screen) bool {
+		for _, b := range a.bordered {
+			if b.HasFocus() {
+				b.SetBorderColor(a.theme.Focus)
+			} else {
+				b.SetBorderColor(a.theme.Border)
+			}
+		}
+		return false
+	})
+	a.switchTab(0)
+	a.tv.SetFocus(a.urlInput)
+}
+
+// unfocusable makes a decorative primitive hand focus on to the current tab
+// when it is clicked, so keyboard navigation never gets stuck on it.
+func (a *App) unfocusable(p interface {
+	SetFocusFunc(func()) *tview.Box
+}) {
+	p.SetFocusFunc(func() {
+		if fs := a.tabs[a.activeTab].focus(); len(fs) > 0 {
+			a.tv.SetFocus(fs[0])
+			return
+		}
+		a.tv.SetFocus(a.urlInput)
+	})
+}
+
+// focusables is the Tab-key cycle for the current tab.
+func (a *App) focusables() []tview.Primitive {
+	fs := []tview.Primitive{a.tree, a.methodDrop, a.urlInput, a.sendBtn}
+	fs = append(fs, a.tabs[a.activeTab].focus()...)
+	if !a.tabs[a.activeTab].wide {
+		fs = append(fs, a.response)
+	}
+	return fs
+}
+
+func (a *App) focusIndex(p tview.Primitive) int {
+	for i, f := range a.focusables() {
+		if f == p {
+			return i
+		}
+	}
+	return -1
+}
+
+func (a *App) cycleFocus(delta int) {
+	fs := a.focusables()
+	i := a.focusIndex(a.tv.GetFocus())
+	if i < 0 {
+		i = 0
+	} else {
+		i = (i + delta + len(fs)) % len(fs)
+	}
+	a.tv.SetFocus(fs[i])
+}
+
+func (a *App) switchTab(i int) {
+	if i < 0 || i >= len(a.tabs) {
+		return
+	}
+	focus := a.tv.GetFocus()
+	wasInTab := false
+	for _, p := range a.tabs[a.activeTab].focus() {
+		if p == focus {
+			wasInTab = true
+		}
+	}
+	wasInResponse := focus == a.response
+
+	a.activeTab = i
+	a.tabPages.SwitchToPage(a.tabs[i].name)
+	if a.tabs[i].wide {
+		a.contentRow.ResizeItem(a.response, 0, 0)
+	} else {
+		a.contentRow.ResizeItem(a.response, 0, 1)
+	}
+	a.renderTabBar()
+
+	if wasInTab || (wasInResponse && a.tabs[i].wide) {
+		if fs := a.tabs[i].focus(); len(fs) > 0 {
+			a.tv.SetFocus(fs[0])
+		} else {
+			a.tv.SetFocus(a.urlInput)
+		}
+	}
+}
+
+func isTextEntry(p tview.Primitive) bool {
+	switch p.(type) {
+	case *tview.InputField, *tview.TextArea:
+		return true
+	}
+	return false
+}
+
+func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
+	key, mod := ev.Key(), ev.Modifiers()
+
+	if key == tcell.KeyCtrlC || key == tcell.KeyCtrlQ {
+		a.quit()
+		return nil
+	}
+	// Dialogs handle their own keys.
+	if len(a.dialogs) > 0 {
+		return ev
+	}
+
+	focus := a.tv.GetFocus()
+	inCycle := a.focusIndex(focus) >= 0
+	typing := isTextEntry(focus)
+
+	switch {
+	case key == tcell.KeyCtrlR || key == tcell.KeyF5 || (key == tcell.KeyEnter && mod&tcell.ModCtrl != 0):
+		a.send()
+		return nil
+	case key == tcell.KeyCtrlS:
+		a.save()
+		return nil
+	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 's' || ev.Rune() == 'S'):
+		a.saveAs()
+		return nil
+	case key == tcell.KeyCtrlN:
+		a.newRequest()
+		return nil
+	case key == tcell.KeyCtrlG || key == tcell.KeyF4:
+		a.showCurl()
+		return nil
+	case key == tcell.KeyCtrlP:
+		a.formatBody()
+		return nil
+	case key == tcell.KeyF1 || (key == tcell.KeyRune && ev.Rune() == '?' && !typing && inCycle):
+		a.showHelp()
+		return nil
+	case key == tcell.KeyEsc:
+		if a.sending {
+			a.cancelRequest()
+			return nil
+		}
+		if focus == a.urlInput {
+			return ev // closes autocomplete first; the done func handles the rest
+		}
+		if inCycle && focus != a.tree {
+			a.tv.SetFocus(a.tree)
+			return nil
+		}
+		return ev
+	case key == tcell.KeyRune && ev.Rune() >= '1' && ev.Rune() <= '9':
+		idx := int(ev.Rune() - '1')
+		if idx < len(a.tabs) && (mod&tcell.ModAlt != 0 || (inCycle && !typing && mod == 0)) {
+			a.switchTab(idx)
+			return nil
+		}
+		return ev
+	case key == tcell.KeyTab && inCycle:
+		a.cycleFocus(1)
+		return nil
+	case key == tcell.KeyBacktab && inCycle:
+		a.cycleFocus(-1)
+		return nil
+	}
+	return ev
+}
+
+// quit saves the workspace (including the unsaved builder state) and exits.
+func (a *App) quit() {
+	if a.cancel != nil {
+		a.cancel()
+	}
+	a.saveDraft()
+	a.tv.Stop()
+}
+
+// persist writes the workspace to disk and reports failures in the status bar.
+func (a *App) persist() bool {
+	if a.store == nil {
+		return true
+	}
+	if err := a.store.Save(a.ws); err != nil {
+		a.setStatus(levelError, "Could not save workspace: "+err.Error())
+		return false
+	}
+	return true
+}
+
+func (a *App) saveDraft() {
+	ci, ri := -1, -1
+	if a.linked != nil {
+		ci, ri = a.ws.Locate(a.linked)
+	}
+	a.ws.Draft = &models.Draft{Request: a.req.Clone(), Collection: ci, Index: ri}
+	a.persist()
+}
+
+func (a *App) restoreDraft() {
+	if d := a.ws.Draft; d != nil {
+		var linked *models.Request
+		if d.Collection >= 0 && d.Collection < len(a.ws.Collections) {
+			c := a.ws.Collections[d.Collection]
+			if d.Index >= 0 && d.Index < len(c.Requests) {
+				linked = c.Requests[d.Index]
+			}
+		}
+		a.loadIntoBuilder(d.Request, linked)
+		return
+	}
+	// First run: open the first saved request so there is something to send.
+	if len(a.ws.Collections) > 0 && len(a.ws.Collections[0].Requests) > 0 {
+		r := a.ws.Collections[0].Requests[0]
+		a.loadIntoBuilder(*r, r)
+		return
+	}
+	a.loadIntoBuilder(models.NewRequest(""), nil)
+}
+
+const (
+	levelInfo = iota
+	levelSuccess
+	levelWarning
+	levelError
+)
+
+func (a *App) setStatus(level int, msg string) {
+	a.status, a.statusLevel = msg, level
+	a.renderStatus()
+}
+
+func (a *App) renderStatus() {
+	color := a.theme.HexMuted
+	switch a.statusLevel {
+	case levelSuccess:
+		color = a.theme.HexSuccess
+	case levelWarning:
+		color = a.theme.HexWarning
+	case levelError:
+		color = a.theme.HexError
+	}
+	a.statusMsg.SetText(fmt.Sprintf(" [%s]%s", color, tview.Escape(a.status)))
+	k := func(key, label string) string {
+		return fmt.Sprintf("[%s::b]%s[-:-:-] [%s]%s[-]  ", a.theme.HexAccent, key, a.theme.HexMuted, label)
+	}
+	a.statusKeys.SetText(k("^R", "send") + k("^S", "save") + k("^N", "new") + k("Tab", "focus") + k("F1", "help") + k("^Q", "quit"))
+}

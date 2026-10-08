@@ -12,7 +12,7 @@ build_local() {
     echo "Building $APP_NAME..."
     mkdir -p "$BIN_DIR"
     
-    go build -o "$BIN_DIR/$APP_NAME" "$CMD_DIR/main.go"
+    go build -o "$BIN_DIR/$APP_NAME" "./$CMD_DIR"
     
     if [ $? -eq 0 ]; then
         echo "Build complete: $BIN_DIR/$APP_NAME"
@@ -30,7 +30,7 @@ build_cross() {
     echo "Building for $os/$arch..."
     mkdir -p "$DIST_DIR"
     
-    GOOS=$os GOARCH=$arch go build -o "$DIST_DIR/$APP_NAME-$os-$arch$ext" "$CMD_DIR/main.go"
+    CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -o "$DIST_DIR/$APP_NAME-$os-$arch$ext" "./$CMD_DIR"
     
     if [ $? -eq 0 ]; then
         echo "  ✓ $DIST_DIR/$APP_NAME-$os-$arch$ext"
@@ -43,6 +43,7 @@ build_all() {
     echo "Building for all platforms..."
     
     build_cross "linux" "amd64"
+    build_cross "linux" "arm64"
     build_cross "windows" "amd64" ".exe"
     build_cross "darwin" "amd64"
     build_cross "darwin" "arm64"

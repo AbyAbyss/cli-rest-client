@@ -24,7 +24,7 @@ Open Command Prompt or Git Bash:
 
 ```cmd
 # Navigate to project directory
-cd term-rest-client
+cd cli-rest-client
 
 # Build
 build.bat
@@ -39,7 +39,7 @@ Open PowerShell:
 
 ```powershell
 # Navigate to project directory
-cd term-rest-client
+cd cli-rest-client
 
 # Build
 .\build.ps1
@@ -59,7 +59,7 @@ Works in any terminal:
 
 ```cmd
 # Build
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
+go build -o bin\term-rest-client.exe .\cmd\term-rest-client
 
 # Run
 bin\term-rest-client.exe
@@ -115,7 +115,7 @@ run.bat
 ### Using Go Run (No Build Step)
 
 ```cmd
-go run cmd/term-rest-client/main.go
+go run ./cmd/term-rest-client
 ```
 
 ### Format Code
@@ -190,7 +190,7 @@ go mod tidy
 
 Windows uses backslashes (`\`) in paths:
 - Build output: `bin\term-rest-client.exe`
-- Source: `cmd\term-rest-client\main.go`
+- Source: `.\cmd\term-rest-client`
 - Config: `config\config.json` (if added)
 
 ## Environment Variables
@@ -200,7 +200,7 @@ Set Go-specific variables if needed:
 ```cmd
 set GOOS=windows
 set GOARCH=amd64
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
+go build -o bin\term-rest-client.exe .\cmd\term-rest-client
 ```
 
 ## Next Steps

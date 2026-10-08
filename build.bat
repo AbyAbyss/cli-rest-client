@@ -9,7 +9,7 @@ set BIN_DIR=bin
 echo Building %APP_NAME%...
 if not exist %BIN_DIR% mkdir %BIN_DIR%
 
-go build -o %BIN_DIR%\%APP_NAME%.exe %CMD_DIR%\main.go
+go build -o %BIN_DIR%\%APP_NAME%.exe .\%CMD_DIR%
 
 if %ERRORLEVEL% EQU 0 (
     echo Build complete: %BIN_DIR%\%APP_NAME%.exe

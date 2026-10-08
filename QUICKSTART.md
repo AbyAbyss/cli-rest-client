@@ -1,5 +1,29 @@
 # Quick Start Guide
 
+## macOS: install the `term-rest-client` command
+
+```bash
+brew install go                 # if Go isn't installed yet
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make install                    # builds and puts it on your PATH
+term-rest-client                # run from any terminal
+```
+
+`make uninstall` removes it again. See the README for details.
+
+## Linux: install the `term-rest-client` command
+
+```bash
+sudo apt install git make && sudo snap install go --classic   # Ubuntu/Debian; see README for other distros
+git clone https://github.com/AbyAbyss/cli-rest-client.git
+cd cli-rest-client
+make install                    # installs to ~/.local/bin
+term-rest-client                # run from any terminal
+```
+
+If the command isn't found, open a new terminal or follow the PATH line the installer prints.
+
 ## Windows
 
 ### Option 1: Batch Script (Easiest)
@@ -16,7 +40,7 @@ run.bat
 
 ### Option 3: Go Directly
 ```cmd
-go build -o bin\term-rest-client.exe cmd\term-rest-client\main.go
+go build -o bin\term-rest-client.exe .\cmd\term-rest-client
 bin\term-rest-client.exe
 ```
 
@@ -37,7 +61,7 @@ chmod +x build.sh run.sh
 
 ### Option 2: Go Directly
 ```bash
-go build -o bin/term-rest-client cmd/term-rest-client/main.go
+go build -o bin/term-rest-client ./cmd/term-rest-client
 ./bin/term-rest-client
 ```
 
@@ -80,3 +104,17 @@ chmod +x build.sh run.sh
 For more details, see [docs/BUILD.md](docs/BUILD.md)
 
 
+
+## First Request
+
+1. Start the app. The sample workspace opens `Auth API / Login`.
+2. Press `Ctrl+R` (or `F5`) to send it. The response and test results appear on the right.
+3. Pick another request in the Collections tree with the arrow keys and `Enter`.
+4. Edit the URL or a tab, then press `Ctrl+S` to save. `Ctrl+N` starts a new request.
+5. Press `F1` at any time for the full list of shortcuts, `Ctrl+Q` to quit.
+
+Your collections are saved automatically. Run a saved request without the UI:
+
+```bash
+./bin/term-rest-client run "User Service/Get JSON"
+```
