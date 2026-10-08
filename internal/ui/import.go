@@ -8,44 +8,133 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
+	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/postman"
 )
 
-// importPostman asks for a Postman export file (collection, environment or
-// globals) and adds it to the workspace.
+// importPostman opens the Import dialog. It accepts a pasted cURL command
+// (one or several) or the path of a Postman export / a file containing curl
+// commands.
 func (a *App) importPostman() {
-	a.prompt("Import from Postman", "File", a.lastImportDir, func(path string) {
-		path = expandHome(strings.Trim(strings.TrimSpace(path), `"'`))
-		data, err := os.ReadFile(path)
-		if err != nil {
-			a.setStatus(levelError, "Import failed: "+err.Error())
-			return
-		}
-		res, err := postman.Import(data, a.ws)
-		if err != nil {
-			a.setStatus(levelError, "Import failed: "+err.Error())
-			return
-		}
-		a.lastImportDir = filepath.Dir(path) + string(filepath.Separator)
-		a.persist()
-		a.refreshEnvPicker()
-		a.refreshVariablesTab()
-		if res.Collection != nil {
-			a.showSidebar(sideCollections, false)
-			a.rebuildTree(res.Collection)
-			a.tv.SetFocus(a.tree)
-		}
-		a.setStatus(levelSuccess, res.Summary())
-		if len(res.Warnings) > 0 {
-			var sb strings.Builder
-			fmt.Fprintf(&sb, "[%s::b]%s[-:-:-]\n\n", a.theme.HexSuccess, tview.Escape(res.Summary()))
-			fmt.Fprintf(&sb, "[%s]Some things don't map one-to-one:\n\n", a.theme.HexMuted)
-			for _, w := range res.Warnings {
-				fmt.Fprintf(&sb, "[%s]• [%s]%s\n", a.theme.HexWarning, a.theme.HexText, tview.Escape(w))
+	a.textDialog("Import", "Paste a cURL command, or enter the path of a Postman export · Enter imports · Esc cancels",
+		a.lastImportDir, func(text string) {
+			text = strings.TrimSpace(text)
+			if curl.LooksLikeCurl(text) {
+				a.importCurl(text, false)
+				return
 			}
-			a.showText("Import notes · Esc to close", sb.String(), 90, 24)
+			path := expandHome(strings.Trim(text, `"'`))
+			data, err := os.ReadFile(path)
+			if err != nil {
+				a.setStatus(levelError, "Import failed: "+err.Error())
+				return
+			}
+			a.lastImportDir = filepath.Dir(path) + string(filepath.Separator)
+			if curl.LooksLikeCurl(string(data)) {
+				a.importCurl(string(data), false)
+				return
+			}
+			a.importPostmanData(data)
+		})
+}
+
+func (a *App) importPostmanData(data []byte) {
+	res, err := postman.Import(data, a.ws)
+	if err != nil {
+		a.setStatus(levelError, "Import failed: "+err.Error())
+		return
+	}
+	a.persist()
+	a.refreshEnvPicker()
+	a.refreshVariablesTab()
+	if res.Collection != nil {
+		a.showSidebar(sideCollections, false)
+		a.rebuildTree(res.Collection)
+		a.tv.SetFocus(a.tree)
+	}
+	a.setStatus(levelSuccess, res.Summary())
+	a.showNotes("Import notes", res.Summary(), "Some things don't map one-to-one:", res.Warnings)
+}
+
+func (a *App) showNotes(title, summary, intro string, notes []string) {
+	if len(notes) == 0 {
+		return
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "[%s::b]%s[-:-:-]\n\n", a.theme.HexSuccess, tview.Escape(summary))
+	fmt.Fprintf(&sb, "[%s]%s\n\n", a.theme.HexMuted, tview.Escape(intro))
+	for _, w := range notes {
+		fmt.Fprintf(&sb, "[%s]• [%s]%s\n", a.theme.HexWarning, a.theme.HexText, tview.Escape(w))
+	}
+	a.showText(title+" · Esc to close", sb.String(), 90, 24)
+}
+
+// importCurl loads one curl command into the builder as an unsaved
+// request, or saves several into a new collection. fromURLField skips the
+// unsaved-changes prompt: the command was typed or pasted over the URL, so
+// replacing the request is exactly what was asked for.
+func (a *App) importCurl(text string, fromURLField bool) {
+	results, err := curl.ParseAll(text)
+	if err != nil {
+		a.setStatus(levelError, "Could not read the cURL command: "+err.Error())
+		return
+	}
+	var notes []string
+	for _, r := range results {
+		for _, n := range r.Notes {
+			prefix := ""
+			if len(results) > 1 {
+				prefix = r.Request.Name + ": "
+			}
+			notes = append(notes, prefix+n)
 		}
-	})
+	}
+	if len(results) == 1 {
+		r := results[0].Request
+		load := func() {
+			a.loadIntoBuilder(r, nil)
+			a.result = nil
+			a.renderResponse()
+			a.rebuildTree(nil)
+			a.tv.SetFocus(a.urlInput)
+			summary := fmt.Sprintf("Imported from cURL: %s %s. Ctrl+R sends it, Ctrl+S saves it.", r.Method, r.URL)
+			a.setStatus(levelSuccess, summary)
+			a.showNotes("cURL import notes", summary, "Some options don't carry over:", notes)
+		}
+		if fromURLField {
+			load()
+		} else {
+			a.guardUnsaved(load)
+		}
+		return
+	}
+	name := "cURL import"
+	for i := 2; ; i++ {
+		taken := false
+		for _, c := range a.ws.Collections {
+			if strings.EqualFold(c.Name, name) {
+				taken = true
+			}
+		}
+		if !taken {
+			break
+		}
+		name = fmt.Sprintf("cURL import %d", i)
+	}
+	col := &models.Collection{Name: name}
+	for _, r := range results {
+		req := r.Request
+		col.Requests = append(col.Requests, &req)
+	}
+	a.ws.Collections = append(a.ws.Collections, col)
+	a.persist()
+	a.showSidebar(sideCollections, false)
+	a.rebuildTree(col)
+	a.tv.SetFocus(a.tree)
+	summary := fmt.Sprintf("Imported %d cURL commands into %q", len(results), name)
+	a.setStatus(levelSuccess, summary)
+	a.showNotes("cURL import notes", summary, "Some options don't carry over:", notes)
 }
 
 func expandHome(p string) string {

@@ -1042,7 +1042,7 @@ func TestImportFromPostmanUI(t *testing.T) {
 	h := start(t, nil)
 	abs, _ := filepath.Abs("../postman/testdata/shop.postman_collection.json")
 	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
-	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(abs) })
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText(abs, true) })
 	h.key(tcell.KeyEnter, 0, 0)
 	h.do(func() {
 		last := h.a.ws.Collections[len(h.a.ws.Collections)-1]
@@ -1068,11 +1068,11 @@ func TestImportFromPostmanUI(t *testing.T) {
 	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
 	h.key(tcell.KeyRune, 'i', 0)
 	h.do(func() {
-		in := h.a.tv.GetFocus().(*tview.InputField)
+		in := h.a.tv.GetFocus().(*tview.TextArea)
 		if !strings.HasSuffix(in.GetText(), "testdata"+string(filepath.Separator)) {
 			t.Fatalf("should start in the last folder, got %q", in.GetText())
 		}
-		in.SetText(in.GetText() + "staging.postman_environment.json")
+		in.SetText(in.GetText()+"staging.postman_environment.json", true)
 	})
 	h.key(tcell.KeyEnter, 0, 0)
 	h.do(func() {
@@ -1095,7 +1095,7 @@ func TestImportFromPostmanUI(t *testing.T) {
 	before := 0
 	h.do(func() { before = len(h.a.ws.Collections) })
 	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
-	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText("/nonexistent/file.json") })
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText("/nonexistent/file.json", true) })
 	h.key(tcell.KeyEnter, 0, 0)
 	h.do(func() {
 		if len(h.a.ws.Collections) != before || !strings.Contains(h.a.status, "Import failed") {
@@ -1166,4 +1166,107 @@ func TestExportToPostmanUI(t *testing.T) {
 	if !strings.Contains(string(b), `"name": "Local"`) || !strings.Contains(string(b), `"local-dev-token"`) {
 		t.Fatalf("environment export: %s", b)
 	}
+}
+
+// paste sends text as a bracketed paste, like a terminal does.
+func (h *harness) paste(text string) {
+	h.t.Helper()
+	h.screen.PostEvent(tcell.NewEventPaste(true))
+	for _, r := range text {
+		if r == '\n' {
+			h.screen.InjectKey(tcell.KeyEnter, 0, 0)
+		} else {
+			h.screen.InjectKey(tcell.KeyRune, r, 0)
+		}
+	}
+	h.screen.PostEvent(tcell.NewEventPaste(false))
+}
+
+func TestCurlImportUI(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	h := start(t, nil)
+	h.key(tcell.KeyCtrlN, 0, tcell.ModCtrl) // clean, unsaved builder
+
+	// Pasting a multi-line curl command into the URL field converts it.
+	cmd := "curl '" + srv.URL + "/post?src=paste' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Authorization: Bearer pasted-token' \\\n  --data-raw '{\"name\":\"Aby\"}'"
+	h.do(func() { h.a.tv.SetFocus(h.a.urlInput) })
+	h.paste(cmd)
+	h.eventually("curl converted", func() bool { return h.a.req.Method == "POST" })
+	h.do(func() {
+		r := h.a.req
+		if r.URL != srv.URL+"/post" || len(r.Params) != 1 || r.Auth.Token != "pasted-token" || r.BodyType != models.BodyJSON || r.Body != `{"name":"Aby"}` {
+			t.Fatalf("converted request: %+v", r)
+		}
+		if h.a.urlInput.GetText() != srv.URL+"/post" || h.a.linked != nil {
+			t.Fatal("URL field should hold just the URL, unsaved")
+		}
+	})
+	// And it sends.
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("response", func() bool { return h.a.result != nil && h.a.result.resp != nil })
+	h.do(func() {
+		if h.a.result.reqHeaders.Get("Authorization") != "Bearer pasted-token" {
+			t.Fatal("auth not sent")
+		}
+	})
+
+	// A normal URL paste is just text.
+	h.do(func() { h.a.loadIntoBuilder(models.NewRequest(""), nil); h.a.tv.SetFocus(h.a.urlInput) })
+	h.paste("https://example.test/plain")
+	h.eventually("plain paste", func() bool { return h.a.req.URL == "https://example.test/plain" })
+
+	// Typing a curl command and pressing Enter converts instead of sending.
+	h.do(func() { h.a.urlInput.SetText(""); h.a.tv.SetFocus(h.a.urlInput) })
+	h.typeText("curl -X DELETE https://example.test/items/9")
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if h.a.req.Method != "DELETE" || h.a.req.URL != "https://example.test/items/9" || h.a.sending {
+			t.Fatalf("enter on curl: %+v sending=%v", h.a.req, h.a.sending)
+		}
+	})
+
+	// The Import dialog takes several commands and makes a collection.
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText("", true) })
+	h.paste("curl https://example.test/a\ncurl -d 'x=1' https://example.test/b -k")
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		last := h.a.ws.Collections[len(h.a.ws.Collections)-1]
+		if last.Name != "cURL import" || len(last.Requests) != 2 || last.Requests[1].Method != "POST" {
+			t.Fatalf("collection: %+v", last)
+		}
+		if len(h.a.dialogs) != 1 {
+			t.Fatal("the -k note should be shown")
+		}
+	})
+	if s := h.screenText(); !strings.Contains(s, "Verify TLS certs") {
+		t.Fatalf("notes:\n%s", s)
+	}
+	h.key(tcell.KeyEsc, 0, 0)
+
+	// A line ending in \ continues instead of submitting.
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText("curl https://example.test/c \\", true) })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.dialogs) != 1 {
+			t.Fatal("dialog should stay open after a continuation line")
+		}
+	})
+	h.typeText("-H 'X: 1'")
+	h.key(tcell.KeyEnter, 0, 0)
+	// The builder still has the unsaved DELETE from before, so the dialog
+	// import asks first; Discard is the default button.
+	h.do(func() {
+		if len(h.a.dialogs) != 1 {
+			t.Fatal("expected the unsaved-changes prompt")
+		}
+	})
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.dialogs) != 0 || h.a.req.URL != "https://example.test/c" || len(h.a.req.Headers) != 1 {
+			t.Fatalf("continued command: %+v", h.a.req)
+		}
+	})
 }

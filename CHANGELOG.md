@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Import from cURL: paste a curl command into the URL field (or `Ctrl+O`) to get a
+  request with method, params, headers, auth and body; several commands become a
+  collection. Handles browser "Copy as cURL" output ($'...' quoting, continuations,
+  --data-raw, --compressed, cookies), -u / bearer headers to Auth, --json, -G, -F,
+  --data-urlencode. CLI: `term-rest-client curl` and curl files in `import`.
 - Export to Postman: collections and folders as Collection v2.1 files (`x` in the tree),
   environments and globals (Export button in the Variables tab), and
   `term-rest-client export`. Requests imported from Postman get their original scripts

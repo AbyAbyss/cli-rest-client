@@ -19,6 +19,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
 - **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
+- **Import from cURL**: paste a curl command (from browser dev tools, API docs or Postman) into the URL field and it becomes a request, with headers, auth, body and params filled in.
 - **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
@@ -198,7 +199,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body |
 | `Ctrl+G`, `F4` | Show the request as a cURL command |
-| `Ctrl+O` | Import a Postman collection, environment or globals file |
+| `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
 | `Alt+E` | Switch to the next environment (No Environment → each environment → back) |
@@ -215,7 +216,7 @@ In the **Collections tree**:
 | `f` | New folder inside the selected collection or folder (or the folder of the selected request) |
 | `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
-| `i` | Import from Postman (same as `Ctrl+O`) |
+| `i` | Import cURL or a Postman file (same as `Ctrl+O`) |
 | `x` | Export the selected collection or folder as a Postman collection |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
@@ -249,6 +250,29 @@ The tree works like Postman's sidebar:
 - A folder moved to the top level with `m` becomes a collection, and a collection moved into another one becomes a folder.
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
+
+### Importing from cURL
+
+Copy a request as cURL (Chrome or Firefox dev tools: right-click a request → **Copy as cURL**; or any `curl` example from API docs) and:
+
+- **paste it into the URL field**: it turns into a request straight away (method, URL, query params, headers, auth, body), unsaved, ready to send with `Ctrl+R` or save with `Ctrl+S`. Typing `curl ...` in the URL field and pressing `Enter` does the same;
+- or press `Ctrl+O` and paste one or more commands. Several commands become a new collection called "cURL import";
+- or from a terminal: `term-rest-client curl -into "Shop API/Orders" -X POST https://api.example.com/orders -d '{"qty":1}'`, `pbpaste | term-rest-client curl` (reads standard input), or `term-rest-client import calls.sh` for a file of curl commands.
+
+Understood:
+
+| curl | Becomes |
+|------|---------|
+| URL (`--url` or positional), `?query` | URL and Params |
+| `-X`, `-I` (HEAD), `-G` (data as query) | Method; POST when there is a body |
+| `-H 'Name: value'`, `-A`, `-e`, `-b 'a=1; b=2'` | Headers (User-Agent, Referer, Cookie) |
+| `-u user:pass`, `--oauth2-bearer`, `Authorization: Bearer/Basic` header | The Auth tab (Basic or Bearer) |
+| `-d`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json` | Body: JSON when the Content-Type (or the body) says so, form fields for `key=value&...`, XML or text otherwise |
+| `-F name=value` | Form fields (file fields are skipped) |
+| `$'...'`, `'...'`, `"..."`, `\` line breaks, `;`, `&&`, `\| jq` | Shell quoting and line continuations as bash reads them; pipes are ignored |
+| `-L`, `-s`, `-v`, `--compressed`, `-o`, `-m`, ... | Ignored (they don't change the request) |
+
+`-k`, bodies read from `@file`, and file uploads can't be carried over and are listed in a notes window.
 
 ### Importing from Postman
 
@@ -417,6 +441,7 @@ term-rest-client env                                    # list environments (* m
 term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
+term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
 term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```

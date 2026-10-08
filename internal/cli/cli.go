@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/postman"
@@ -328,6 +329,14 @@ func Import(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, f
 			failed = true
 			continue
 		}
+		if curl.LooksLikeCurl(string(data)) {
+			if Curl(strings.NewReader(string(data)), out, errOut, ws, nil, nil) != 0 {
+				failed = true
+			} else {
+				imported++
+			}
+			continue
+		}
 		res, err := postman.Import(data, ws)
 		if err != nil {
 			fmt.Fprintf(errOut, "%s: %v\n", f, err)
@@ -426,4 +435,79 @@ func findCollection(ws *models.Workspace, path string) *models.Collection {
 		}
 	})
 	return found
+}
+
+// Curl saves curl commands (from the arguments, or standard input when
+// there are none or the argument is "-") as requests in a collection or
+// folder (-into "Collection/Folder"; default: the top level).
+func Curl(in io.Reader, out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args []string) int {
+	// Only -into and -name belong to this command, and only at the front;
+	// everything after them is curl's own arguments (so -X, -H, ... pass through).
+	var into, name string
+	for len(args) >= 2 && (args[0] == "-into" || args[0] == "--into" || args[0] == "-name" || args[0] == "--name") {
+		if strings.TrimLeft(args[0], "-") == "into" {
+			into = args[1]
+		} else {
+			name = args[1]
+		}
+		args = args[2:]
+	}
+	text := ""
+	if len(args) > 0 && args[0] != "-" {
+		// Re-quote the arguments so the curl parser sees the same words.
+		quoted := make([]string, len(args))
+		for i, a := range args {
+			quoted[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		}
+		text = strings.Join(quoted, " ")
+		if args[0] != "curl" {
+			text = "curl " + text
+		}
+	} else {
+		data, err := io.ReadAll(in)
+		if err != nil {
+			fmt.Fprintln(errOut, "curl:", err)
+			return 1
+		}
+		text = string(data)
+	}
+	results, err := curl.ParseAll(text)
+	if err != nil {
+		fmt.Fprintln(errOut, "curl:", err)
+		return 2
+	}
+	var parent *models.Collection
+	if into != "" {
+		if parent = findCollection(ws, into); parent == nil {
+			fmt.Fprintf(errOut, "curl: no collection or folder named %q\n", into)
+			return 2
+		}
+	}
+	if name != "" && len(results) > 1 {
+		fmt.Fprintln(errOut, "curl: -name works with a single command")
+		return 2
+	}
+	where := "the top level"
+	if parent != nil {
+		where = into
+	}
+	list := ws.RequestsIn(parent)
+	for _, r := range results {
+		req := r.Request
+		if name != "" {
+			req.Name = name
+		}
+		*list = append(*list, &req)
+		fmt.Fprintf(out, "Saved %s %s as %q in %s\n", req.Method, req.URL, req.Name, where)
+		for _, n := range r.Notes {
+			fmt.Fprintf(out, "  note: %s\n", n)
+		}
+	}
+	if store != nil {
+		if err := store.Save(ws); err != nil {
+			fmt.Fprintln(errOut, "curl: could not save workspace:", err)
+			return 1
+		}
+	}
+	return 0
 }

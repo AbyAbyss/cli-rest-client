@@ -9,6 +9,7 @@ internal/storage       JSON workspace file: Load, atomic Save, DefaultPath, Samp
 internal/vars          {{name}} substitution and dynamic variables ($uuid, $timestamp, ...)
 internal/engine        Prepare(Request, vars) -> *http.Request (+ missing vars, warnings); Curl()
 internal/script        RunPre (set/unset) and RunTests (assertions and captures)
+internal/curl          curl command line parser (shell quoting, curl options -> Request)
 internal/postman       Postman import and export (collections, environments, globals)
 internal/cli           headless "list" and "run" commands
 internal/ui            tview application

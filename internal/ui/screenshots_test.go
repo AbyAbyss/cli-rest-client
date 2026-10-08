@@ -184,7 +184,7 @@ func TestScreenshots(t *testing.T) {
 		h.a.tv.SetFocus(h.a.tree)
 	})
 	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
-	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(imp) })
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText(imp, true) })
 	h.key(tcell.KeyEnter, 0, 0)
 	writeShot(t, h, dir, "import", "Import from Postman")
 	h.key(tcell.KeyEsc, 0, 0)

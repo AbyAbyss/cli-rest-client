@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/vars"
 )
@@ -104,6 +105,10 @@ func (a *App) buildRequestBar() {
 	a.urlInput.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
+			if text := a.urlInput.GetText(); curl.LooksLikeCurl(text) {
+				a.importCurl(text, true)
+				return
+			}
 			a.send()
 		case tcell.KeyEscape:
 			a.tv.SetFocus(a.sidebar())
@@ -570,4 +575,21 @@ func (a *App) renderTitles() {
 	}
 	a.urlInput.SetTitle(fmt.Sprintf(" [%s]%s[-]%s ", a.theme.HexAccent, tview.Escape(where), dirty))
 	a.bodyArea.SetTitle(fmt.Sprintf(" Body · %s ", bodyLabels[indexOf(models.BodyTypes, a.req.BodyType)]))
+}
+
+// urlField is the URL input with one extra trick: pasting a curl command
+// turns it into a request instead of inserting the text.
+type urlField struct {
+	*tview.InputField
+	onPaste func(text string) bool
+}
+
+func (u *urlField) PasteHandler() func(string, func(tview.Primitive)) {
+	inner := u.InputField.PasteHandler()
+	return func(text string, setFocus func(tview.Primitive)) {
+		if u.onPaste != nil && u.onPaste(text) {
+			return
+		}
+		inner(text, setFocus)
+	}
 }

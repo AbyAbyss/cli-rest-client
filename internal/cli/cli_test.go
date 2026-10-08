@@ -232,3 +232,42 @@ func TestExportCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestCurlCommand(t *testing.T) {
+	ws := storage.SampleWorkspace()
+	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
+	var out, errOut bytes.Buffer
+
+	// As arguments (the leading "curl" is optional), into a folder, with a name.
+	code := Curl(strings.NewReader(""), &out, &errOut, ws, store,
+		[]string{"-into", "user service/users", "-name", "Promote", "-X", "POST", "https://x.test/users/1/promote", "-H", "X-A: 1", "-k"})
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	users := findCollection(ws, "User Service/Users")
+	last := users.Requests[len(users.Requests)-1]
+	if last.Name != "Promote" || last.Method != "POST" || !strings.Contains(out.String(), "note: -k") {
+		t.Fatalf("saved %+v\n%s", last, out.String())
+	}
+	if saved, _, _ := store.Load(); findCollection(saved, "User Service/Users").CountRequests() != users.CountRequests() {
+		t.Fatal("not saved")
+	}
+
+	// From stdin, several commands, to the top level.
+	out.Reset()
+	before := len(ws.Requests)
+	if Curl(strings.NewReader("curl https://x.test/a\ncurl https://x.test/b"), &out, &errOut, ws, nil, []string{"-"}) != 0 || len(ws.Requests) != before+2 {
+		t.Fatalf("stdin: %s", out.String())
+	}
+	if Curl(strings.NewReader(""), &out, &errOut, ws, nil, []string{"-into", "Nope", "https://x"}) != 2 {
+		t.Fatal("unknown folder should be a usage error")
+	}
+
+	// import detects a file of curl commands.
+	f := filepath.Join(t.TempDir(), "calls.sh")
+	os.WriteFile(f, []byte("curl -X PUT https://x.test/c -d 'k=v'\n"), 0o644)
+	out.Reset()
+	if Import(&out, &errOut, ws, nil, []string{f}) != 0 || !strings.Contains(out.String(), "Saved PUT https://x.test/c") {
+		t.Fatalf("import of curl file: %s %s", out.String(), errOut.String())
+	}
+}

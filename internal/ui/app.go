@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 )
@@ -167,7 +168,13 @@ func (a *App) build() {
 	a.rightCol = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(a.methodDrop, 13, 0, false).
-			AddItem(a.urlInput, 0, 1, true).
+			AddItem(&urlField{InputField: a.urlInput, onPaste: func(text string) bool {
+				if !curl.LooksLikeCurl(text) {
+					return false
+				}
+				a.importCurl(text, true)
+				return true
+			}}, 0, 1, true).
 			AddItem(a.envDrop, 22, 0, false).
 			AddItem(a.sendBtn, 10, 0, false), 3, 0, true).
 		AddItem(a.tabBar, 1, 0, false).

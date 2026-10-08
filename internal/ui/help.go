@@ -21,7 +21,8 @@ var helpSections = []helpSection{
 		{"Ctrl+N", "New empty request"},
 		{"Ctrl+P", "Pretty-print the JSON body"},
 		{"Ctrl+G / F4", "Show the request as a cURL command"},
-		{"Ctrl+O", "Import a Postman collection, environment or globals file"},
+		{"Ctrl+O", "Import: paste a cURL command, or a Postman export's path"},
+		{"Paste cURL", "Pasting a curl command into the URL field turns it into a request"},
 	}},
 	{"Navigation", [][2]string{
 		{"Tab / Shift+Tab", "Move between fields"},
@@ -37,7 +38,7 @@ var helpSections = []helpSection{
 		{"f", "New folder in the selected collection or folder"},
 		{"a  (or r)", "New request in the selected collection or folder"},
 		{"m", "Move to another collection or folder, or the top level"},
-		{"i", "Import from Postman (same as Ctrl+O)"},
+		{"i", "Import a cURL command or Postman file (same as Ctrl+O)"},
 		{"x", "Export the selected collection or folder as a Postman collection"},
 		{"e  (or F2)", "Rename"},
 		{"c", "Duplicate (folders are copied with everything inside)"},
