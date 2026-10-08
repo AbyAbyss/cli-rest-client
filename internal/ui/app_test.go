@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
+	"github.com/AbyAbyss/cli-rest-client/internal/postman"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/internal/testutil"
 )
@@ -1038,7 +1040,7 @@ func TestEnvironmentsUI(t *testing.T) {
 
 func TestImportFromPostmanUI(t *testing.T) {
 	h := start(t, nil)
-	abs, _ := filepath.Abs("../importer/testdata/shop.postman_collection.json")
+	abs, _ := filepath.Abs("../postman/testdata/shop.postman_collection.json")
 	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
 	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(abs) })
 	h.key(tcell.KeyEnter, 0, 0)
@@ -1100,4 +1102,68 @@ func TestImportFromPostmanUI(t *testing.T) {
 			t.Fatalf("bad file: status %q", h.a.status)
 		}
 	})
+}
+
+func TestExportToPostmanUI(t *testing.T) {
+	h := start(t, nil)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "users.postman_collection.json")
+
+	// x on a request exports the folder it is in.
+	h.do(func() {
+		h.a.rebuildTree(reqAt(t, h.a.ws, "User Service/Users/Create User"))
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyRune, 'x', 0)
+	h.do(func() {
+		in := h.a.tv.GetFocus().(*tview.InputField)
+		if !strings.HasSuffix(in.GetText(), "Users.postman_collection.json") {
+			t.Fatalf("suggested file %q", in.GetText())
+		}
+		in.SetText(file)
+	})
+	h.key(tcell.KeyEnter, 0, 0)
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back := &models.Workspace{}
+	if res, err := postman.Import(data, back); err != nil || res.Requests != 3 {
+		t.Fatalf("exported file doesn't import back: %v", err)
+	}
+	h.do(func() {
+		if !strings.Contains(h.a.status, "Exported \"Users\" (3 requests, 1 folder)") {
+			t.Fatalf("status %q", h.a.status)
+		}
+	})
+
+	// Exporting again to the same file asks before replacing.
+	os.WriteFile(file, []byte("old"), 0o644)
+	h.key(tcell.KeyRune, 'x', 0)
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(file) })
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		if len(h.a.dialogs) != 1 {
+			t.Fatal("expected a replace confirmation")
+		}
+	})
+	h.key(tcell.KeyRight, 0, 0) // Cancel
+	h.key(tcell.KeyEnter, 0, 0)
+	if b, _ := os.ReadFile(file); string(b) != "old" {
+		t.Fatal("cancel must keep the existing file")
+	}
+
+	// The Variables tab exports the environment being edited.
+	envFile := filepath.Join(dir, "local.json")
+	h.do(func() {
+		h.a.editingEnv = "Local"
+		h.a.refreshVariablesTab()
+		h.a.exportEditedVariables()
+	})
+	h.do(func() { h.a.tv.GetFocus().(*tview.InputField).SetText(envFile) })
+	h.key(tcell.KeyEnter, 0, 0)
+	b, _ := os.ReadFile(envFile)
+	if !strings.Contains(string(b), `"name": "Local"`) || !strings.Contains(string(b), `"local-dev-token"`) {
+		t.Fatalf("environment export: %s", b)
+	}
 }

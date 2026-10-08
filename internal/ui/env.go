@@ -115,11 +115,12 @@ func (a *App) buildVariablesTab() *tab {
 		return b
 	}
 	buttons := tview.NewFlex().
-		AddItem(button("New", a.newEnv), 7, 0, false).AddItem(nil, 1, 0, false).
-		AddItem(button("Rename", a.renameEnv), 10, 0, false).AddItem(nil, 1, 0, false).
-		AddItem(button("Duplicate", a.duplicateEnv), 13, 0, false).AddItem(nil, 1, 0, false).
-		AddItem(button("Delete", a.deleteEnv), 10, 0, false).AddItem(nil, 1, 0, false).
-		AddItem(button("Use it", a.useEditedEnv), 10, 0, false).AddItem(nil, 0, 1, false)
+		AddItem(button("New", a.newEnv), 5, 0, false).AddItem(nil, 1, 0, false).
+		AddItem(button("Rename", a.renameEnv), 8, 0, false).AddItem(nil, 1, 0, false).
+		AddItem(button("Duplicate", a.duplicateEnv), 11, 0, false).AddItem(nil, 1, 0, false).
+		AddItem(button("Delete", a.deleteEnv), 8, 0, false).AddItem(nil, 1, 0, false).
+		AddItem(button("Use it", a.useEditedEnv), 8, 0, false).AddItem(nil, 1, 0, false).
+		AddItem(button("Export", a.exportEditedVariables), 8, 0, false).AddItem(nil, 0, 1, false)
 	a.themed = append(a.themed, buttons)
 	a.renderers = append(a.renderers, a.styleEnvButtons)
 
@@ -210,7 +211,7 @@ func (a *App) refreshVariablesTab() {
 	// also when the edited environment is already active.
 	for i, b := range a.envButtons {
 		switch i {
-		case 0: // New
+		case 0, 5: // New, Export (Globals can be exported too)
 			b.SetDisabled(false)
 		case 4: // Use it
 			b.SetDisabled(env == nil || env == a.ws.Active())

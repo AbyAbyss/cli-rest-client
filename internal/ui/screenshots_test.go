@@ -176,7 +176,7 @@ func TestScreenshots(t *testing.T) {
 	h.do(func() { h.a.switchTab(0) })
 
 	// 6e. Import from Postman: the imported tree and the notes dialog.
-	imp, _ := filepath.Abs("../importer/testdata/shop.postman_collection.json")
+	imp, _ := filepath.Abs("../postman/testdata/shop.postman_collection.json")
 	h.do(func() {
 		for _, c := range h.a.ws.Collections[:3] {
 			h.a.collapsed[c] = true

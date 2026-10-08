@@ -222,6 +222,8 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.moveSelectedTo()
 		case 'i':
 			a.importPostman()
+		case 'x':
+			a.exportSelected()
 		case 'K':
 			a.moveSelected(-1)
 		case 'J':

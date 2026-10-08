@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Export to Postman: collections and folders as Collection v2.1 files (`x` in the tree),
+  environments and globals (Export button in the Variables tab), and
+  `term-rest-client export`. Requests imported from Postman get their original scripts
+  back; scripts written here are translated into `pm.test` JavaScript with matching
+  comparison rules. Import and export round-trip.
 - Import from Postman: collections v2.0/v2.1 (nested folders, inherited auth, raw /
   urlencoded / form-data / GraphQL bodies, query and path variables, collection
   variables), environments and globals. Common test/pre-request script patterns are

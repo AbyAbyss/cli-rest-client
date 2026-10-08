@@ -1,6 +1,6 @@
-// Package importer reads Postman exports (collections v2.0/v2.1,
-// environments and globals) into the workspace.
-package importer
+// Package postman reads and writes Postman exports (collections v2.0/v2.1,
+// environments and globals).
+package postman
 
 import (
 	"encoding/json"

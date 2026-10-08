@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
+	"github.com/AbyAbyss/cli-rest-client/internal/postman"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/internal/testutil"
 )
@@ -175,8 +177,8 @@ func TestImportCommand(t *testing.T) {
 	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
 	var out, errOut bytes.Buffer
 	code := Import(&out, &errOut, ws, store, []string{
-		"../importer/testdata/shop.postman_collection.json",
-		"../importer/testdata/staging.postman_environment.json",
+		"../postman/testdata/shop.postman_collection.json",
+		"../postman/testdata/staging.postman_environment.json",
 		"missing.json",
 	})
 	if code != 1 || !strings.Contains(errOut.String(), "missing.json") {
@@ -193,5 +195,40 @@ func TestImportCommand(t *testing.T) {
 	}
 	if Import(&out, &errOut, ws, store, nil) != 2 {
 		t.Fatal("no files should be a usage error")
+	}
+}
+
+func TestExportCommand(t *testing.T) {
+	ws := storage.SampleWorkspace()
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+
+	file := filepath.Join(dir, "users.json")
+	if code := Export(&out, &errOut, ws, []string{"-o", file, "user service/users"}); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `Exported "Users": 3 request(s), 1 folder(s)`) {
+		t.Fatalf("summary: %s", out.String())
+	}
+	// The file imports back.
+	data, _ := os.ReadFile(file)
+	back := &models.Workspace{}
+	res, err := postman.Import(data, back)
+	if err != nil || res.Requests != 3 || res.Collection.Name != "Users" {
+		t.Fatalf("re-import: %v %+v", err, res)
+	}
+
+	out.Reset()
+	if Export(&out, &errOut, ws, []string{"-env", "Local"}) != 0 || !strings.Contains(out.String(), `"_postman_variable_scope": "environment"`) {
+		t.Fatalf("env to stdout: %s", out.String())
+	}
+	out.Reset()
+	if Export(&out, &errOut, ws, []string{"-globals"}) != 0 || !strings.Contains(out.String(), `"key": "token"`) {
+		t.Fatalf("globals: %s", out.String())
+	}
+	for _, args := range [][]string{nil, {"Nope"}, {"-env", "Nope"}} {
+		if Export(&out, &errOut, ws, args) != 2 {
+			t.Errorf("%v should be a usage error", args)
+		}
 	}
 }

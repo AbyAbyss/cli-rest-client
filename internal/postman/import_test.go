@@ -1,4 +1,4 @@
-package importer
+package postman
 
 import (
 	"encoding/base64"

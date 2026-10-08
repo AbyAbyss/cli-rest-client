@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
-	"github.com/AbyAbyss/cli-rest-client/internal/importer"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
+	"github.com/AbyAbyss/cli-rest-client/internal/postman"
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/pkg/httpclient"
@@ -328,7 +328,7 @@ func Import(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, f
 			failed = true
 			continue
 		}
-		res, err := importer.Import(data, ws)
+		res, err := postman.Import(data, ws)
 		if err != nil {
 			fmt.Fprintf(errOut, "%s: %v\n", f, err)
 			failed = true
@@ -350,4 +350,80 @@ func Import(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, f
 		return 1
 	}
 	return 0
+}
+
+// Export writes a collection or folder ("Collection/Folder"), an
+// environment (-env) or the globals (-globals) in Postman format, to -o or
+// standard output.
+func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	file := fs.String("o", "", "write to this file instead of standard output")
+	envName := fs.String("env", "", "export this environment")
+	globals := fs.Bool("globals", false, "export the global variables")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	var data []byte
+	var err error
+	var notes []string
+	summary := ""
+	switch {
+	case *globals:
+		data, err = postman.ExportGlobals(ws.Variables)
+		summary = fmt.Sprintf("Exported %d global variable(s)", len(ws.Variables))
+	case *envName != "":
+		env := ws.Environment(*envName)
+		if env == nil {
+			fmt.Fprintf(errOut, "export: no environment named %q\n", *envName)
+			return 2
+		}
+		data, err = postman.ExportEnvironment(env)
+		summary = fmt.Sprintf("Exported environment %q", env.Name)
+	case fs.NArg() == 1:
+		c := findCollection(ws, fs.Arg(0))
+		if c == nil {
+			fmt.Fprintf(errOut, "export: no collection or folder named %q\n", fs.Arg(0))
+			return 2
+		}
+		var res *postman.ExportResult
+		if res, err = postman.ExportCollection(c); err == nil {
+			data, notes = res.Data, res.Notes
+			summary = fmt.Sprintf("Exported %q: %d request(s), %d folder(s)", c.Name, res.Requests, res.Folders)
+		}
+	default:
+		fmt.Fprintln(errOut, `export: name one collection or folder ("Collection/Folder"), or use -env NAME or -globals`)
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintln(errOut, "export:", err)
+		return 1
+	}
+
+	if *file == "" {
+		out.Write(data)
+	} else {
+		if err := os.WriteFile(*file, data, 0o644); err != nil {
+			fmt.Fprintln(errOut, "export:", err)
+			return 1
+		}
+		fmt.Fprintf(out, "%s to %s\n", summary, *file)
+	}
+	for _, n := range notes {
+		fmt.Fprintf(errOut, "note: %s\n", n)
+	}
+	return 0
+}
+
+// findCollection resolves "Collection/Folder/..." (case-insensitive).
+func findCollection(ws *models.Workspace, path string) *models.Collection {
+	path = strings.Trim(strings.TrimSpace(path), "/")
+	var found *models.Collection
+	ws.WalkCollections(func(anc []*models.Collection, c *models.Collection) {
+		if found == nil && strings.EqualFold(joinPath(append(append([]*models.Collection(nil), anc...), c), ""), path) {
+			found = c
+		}
+	})
+	return found
 }

@@ -38,6 +38,7 @@ var helpSections = []helpSection{
 		{"a  (or r)", "New request in the selected collection or folder"},
 		{"m", "Move to another collection or folder, or the top level"},
 		{"i", "Import from Postman (same as Ctrl+O)"},
+		{"x", "Export the selected collection or folder as a Postman collection"},
 		{"e  (or F2)", "Rename"},
 		{"c", "Duplicate (folders are copied with everything inside)"},
 		{"d  (or Delete)", "Delete (asks first)"},

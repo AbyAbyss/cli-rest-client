@@ -19,7 +19,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
 - **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
-- **Import from Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` in the app or `term-rest-client import FILE`.
+- **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -216,6 +216,7 @@ In the **Collections tree**:
 | `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
 | `i` | Import from Postman (same as `Ctrl+O`) |
+| `x` | Export the selected collection or folder as a Postman collection |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
 | `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
@@ -276,6 +277,30 @@ The file type is detected automatically.
 Anything that doesn't carry over (OAuth 2 and other auth types, file uploads, collection-level scripts) is listed in a notes window after the import, so you know what to check. Importing the same collection twice creates "Shop API 2" rather than overwriting.
 
 ![Import from Postman](assets/screenshots/import.png)
+
+### Exporting to Postman
+
+- **A collection or folder**: select it (or any request inside it) in the Collections tree and press `x`. The file is a Postman **Collection v2.1** you can import in Postman with **Import**. Top-level requests export together as a collection called "Requests".
+- **An environment or the globals**: in tab **7 Variables**, pick it in **Editing** and press **Export**.
+- From a terminal:
+
+```bash
+term-rest-client export -o Users.postman_collection.json "User Service/Users"
+term-rest-client export -env Local -o Local.postman_environment.json
+term-rest-client export -globals > globals.postman_globals.json
+```
+
+The app suggests a file name in the folder you last imported from or exported to, and asks before replacing an existing file.
+
+What goes into the file:
+
+- Folders, requests, method, URL, query params and headers (disabled ones stay disabled in Postman).
+- Auth on every request (Bearer, Basic, API key, or No Auth), so nothing depends on Postman's inheritance.
+- Bodies: JSON, XML and text as raw bodies with the right language; form bodies as x-www-form-urlencoded.
+- `{{$uuid}}` becomes Postman's `{{$randomUUID}}`.
+- **Scripts:** a request that came from Postman gets its original JavaScript back exactly. Scripts written here are translated line by line into Postman JavaScript, for example `status == 200` → `pm.test("status == 200", function () { pm.response.to.have.status(200); });` and `set token = json.token` → `pm.environment.set("token", pm.response.json().token);`. Comparisons follow this app's rules (`json.page == 1` also passes when the value is the string `"1"`). A line with no Postman equivalent is kept as a comment and listed in an export notes window.
+
+Exporting and importing again gives back the same requests; the test suite checks this round trip, and checks that the generated Postman tests pass or fail exactly like the originals.
 
 ### History
 
@@ -339,6 +364,7 @@ Manage them in tab **7 Variables**:
 | **New** | Create an environment |
 | **Rename** / **Duplicate** / **Delete** | Act on the environment being edited. Deleting the active one switches to No Environment |
 | **Use it** | Make the environment being edited the active one |
+| **Export** | Save the environment (or Globals) as a Postman file |
 
 The sample workspace has a global `token` and two environments: **httpbin.org** (`baseUrl=https://httpbin.org`) and **Local** (`baseUrl=http://localhost:8080` and its own `token`). Switching between them sends the same requests to a different server.
 
@@ -391,6 +417,7 @@ term-rest-client env                                    # list environments (* m
 term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
+term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
