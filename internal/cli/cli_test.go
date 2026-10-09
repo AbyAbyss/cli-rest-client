@@ -308,3 +308,27 @@ func TestExportCurl(t *testing.T) {
 		t.Fatal("bad arguments should exit 2")
 	}
 }
+
+func TestRunStreams(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	finite := models.NewRequest("Progress")
+	finite.URL = srv.URL + "/sse?count=3&interval=20"
+	finite.Tests = "events == 3\nevent[-1].json.status == testing"
+	endless := models.NewRequest("Endless")
+	endless.URL = srv.URL + "/ndjson?count=0&interval=20"
+	endless.Tests = "events >= 3"
+	ws.Collections = []*models.Collection{{Name: "Streams", Requests: []*models.Request{&finite, &endless}}}
+
+	var out, errOut bytes.Buffer
+	if code := Run(&out, &errOut, ws, nil, []string{"-stream", "300ms", "Streams"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"3 events (stream ended)", "✓ event[-1].json.status == testing", "events (stopped after 300ms)", "✓ events >= 3"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}

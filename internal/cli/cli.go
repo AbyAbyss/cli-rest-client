@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -65,6 +66,7 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	overrides := setFlags{}
 	fs.Var(overrides, "set", "override a variable for this run (name=value, repeatable)")
 	envName := fs.String("env", "", "environment to use for this run (default: the active one; \"none\" for globals only)")
+	streamFor := fs.Duration("stream", 0, "how long to follow a streaming response (SSE, NDJSON) before stopping it (default: the timeout setting)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -95,8 +97,15 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		targets = append(targets, found...)
 	}
 
+	timeout := time.Duration(ws.Settings.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	if *streamFor <= 0 {
+		*streamFor = timeout
+	}
 	client := httpclient.NewClient(httpclient.Options{
-		Timeout:            time.Duration(ws.Settings.TimeoutSeconds) * time.Second,
+		Timeout:            timeout,
 		DisableRedirects:   ws.Settings.DisableRedirects,
 		InsecureSkipVerify: ws.Settings.InsecureSkipVerify,
 	})
@@ -134,16 +143,35 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		for _, w := range p.Warnings {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
-		resp, err := client.Do(context.Background(), p.Request)
+		// A stream is followed until it ends or -stream runs out; then it is
+		// stopped and the tests run on what arrived.
+		ctx, cancel := context.WithTimeout(context.Background(), *streamFor)
+		resp, err := client.DoStream(ctx, p.Request, nil)
+		cancel()
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				err = fmt.Errorf("no response within %s", *streamFor)
+			}
 			fmt.Fprintf(out, "  error: %v\n", err)
 			failed = true
 			continue
 		}
-		fmt.Fprintf(out, "  %s  %d ms  %d bytes\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Body))
+		if resp.Stream != "" {
+			how := "stream ended"
+			if resp.Stopped {
+				how = fmt.Sprintf("stopped after %s", *streamFor)
+			}
+			fmt.Fprintf(out, "  %s  %d ms  %d events (%s)\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Events), how)
+		} else {
+			fmt.Fprintf(out, "  %s  %d ms  %d bytes\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Body))
+		}
 
+		events := make([]string, len(resp.Events))
+		for i, e := range resp.Events {
+			events[i] = e.Data
+		}
 		results := script.RunTests(r.Tests, script.Response{
-			Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration,
+			Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events,
 		}, variables)
 		var captures []script.Assignment
 		for _, tr := range results {

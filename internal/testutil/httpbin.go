@@ -12,7 +12,7 @@ import (
 
 // NewHTTPBin starts a server implementing the httpbin endpoints used by the
 // sample workspace: /get /post /put /patch /delete /json /bearer
-// /basic-auth/{user}/{pass} /status/{code}.
+// /basic-auth/{user}/{pass}, plus the streaming endpoints in streams.go.
 func NewHTTPBin() *httptest.Server {
 	mux := http.NewServeMux()
 	echo := func(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +66,7 @@ func NewHTTPBin() *httptest.Server {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "user": parts[0]})
 	})
+	addStreams(mux)
 	return httptest.NewServer(mux)
 }
 

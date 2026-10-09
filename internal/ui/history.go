@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -190,6 +191,11 @@ func resultFromHistory(e *models.HistoryEntry) *sendResult {
 			Truncated:  e.BodyTruncated,
 			Duration:   time.Duration(e.DurationMs) * time.Millisecond,
 			URL:        final,
+			Done:       true,
+		}
+		if kind := httpclient.StreamKind(http.Header(e.ResponseHeaders).Get("Content-Type")); kind != "" {
+			res.resp.Stream = kind
+			res.resp.Events = httpclient.ParseStream(kind, e.Body)
 		}
 	}
 	for _, t := range e.Tests {
