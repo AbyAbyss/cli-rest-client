@@ -388,6 +388,10 @@ func (a *App) historyKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.deleteHistoryEntry()
 		case 'X':
 			a.clearHistory()
+		case 'y':
+			if e := a.selectedHistory(); e != nil {
+				a.copyCurl(e.Request)
+			}
 		case 's':
 			if e := a.selectedHistory(); e != nil {
 				a.guardUnsaved(func() {

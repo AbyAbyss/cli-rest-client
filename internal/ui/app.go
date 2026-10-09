@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/clipboard"
 	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
@@ -74,14 +75,18 @@ type App struct {
 	envButtons                                                      []*tview.Button
 	editingEnv                                                      string
 	lastImportDir                                                   string
-	bodyType                                                        *tview.DropDown
-	authType, authIn                                                *tview.DropDown
-	authUser, authPass, authToken, authKey, authValue               *tview.InputField
-	authFields                                                      *tview.Flex
-	themeDrop                                                       *tview.DropDown
-	timeoutInput                                                    *tview.InputField
-	redirectsBox, insecureBox                                       *tview.Checkbox
-	settingsInfo                                                    *tview.TextView
+	// screen is captured while drawing, for the OSC 52 clipboard fallback.
+	screen tcell.Screen
+	// copier puts text on the clipboard (replaced in tests).
+	copier                                            func(text string) (string, error)
+	bodyType                                          *tview.DropDown
+	authType, authIn                                  *tview.DropDown
+	authUser, authPass, authToken, authKey, authValue *tview.InputField
+	authFields                                        *tview.Flex
+	themeDrop                                         *tview.DropDown
+	timeoutInput                                      *tview.InputField
+	redirectsBox, insecureBox                         *tview.Checkbox
+	settingsInfo                                      *tview.TextView
 
 	// Theming: every primitive registered here is restyled on theme change,
 	// renderers regenerate text that embeds color tags.
@@ -200,7 +205,15 @@ func (a *App) build() {
 
 	a.tv.SetRoot(a.pages, true)
 	a.tv.SetInputCapture(a.handleKey)
-	a.tv.SetBeforeDrawFunc(func(tcell.Screen) bool {
+	a.copier = func(text string) (string, error) {
+		var osc52 func([]byte)
+		if s := a.screen; s != nil {
+			osc52 = s.SetClipboard
+		}
+		return clipboard.Copy(text, osc52)
+	}
+	a.tv.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		a.screen = screen
 		for _, b := range a.bordered {
 			if b.HasFocus() {
 				b.SetBorderColor(a.theme.Focus)

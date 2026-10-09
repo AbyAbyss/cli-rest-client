@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Copy as cURL: `c` in the `Ctrl+G` window copies the command to the clipboard and `v`
+  switches between filled-in values and `{{variables}}`; `y` in the Collections tree
+  and History copies a request directly. Uses pbcopy, wl-copy, xclip, xsel or clip,
+  and OSC 52 over SSH. CLI: `term-rest-client export -curl [-raw]`.
 - Import from cURL: paste a curl command into the URL field (or `Ctrl+O`) to get a
   request with method, params, headers, auth and body; several commands become a
   collection. Handles browser "Copy as cURL" output ($'...' quoting, continuations,
@@ -73,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Send is `Ctrl+R` / `F5` / `Enter` in the URL field, save is `Ctrl+S`, save as is `Alt+S`.
 
 ### Fixed
+- cURL output for HEAD requests uses `-I`, since `-X HEAD` makes curl wait for a body.
 - Typing digits in the URL, body or any text field switched tabs instead of inserting text.
 - `Esc` quit the application, including from dialogs and dropdowns.
 - `Ctrl+S`, `Ctrl+Q` and `Ctrl+Shift+S` never fired in real terminals; saving was unreachable.

@@ -220,7 +220,11 @@ func (p *Prepared) SentHeaders() http.Header {
 func (p *Prepared) Curl() string {
 	var sb strings.Builder
 	sb.WriteString("curl")
-	if p.Request.Method != http.MethodGet {
+	switch p.Request.Method {
+	case http.MethodGet:
+	case http.MethodHead:
+		sb.WriteString(" -I") // -X HEAD would make curl wait for a body
+	default:
 		sb.WriteString(" -X " + p.Request.Method)
 	}
 	sb.WriteString(" " + shellQuote(p.Request.URL.String()))

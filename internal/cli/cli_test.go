@@ -271,3 +271,26 @@ func TestCurlCommand(t *testing.T) {
 		t.Fatalf("import of curl file: %s %s", out.String(), errOut.String())
 	}
 }
+
+func TestExportCurl(t *testing.T) {
+	ws := storage.SampleWorkspace()
+	var out, errOut bytes.Buffer
+	if code := Export(&out, &errOut, ws, []string{"-curl", "auth api/bearer token"}); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if got := out.String(); !strings.Contains(got, "curl 'https://httpbin.org/bearer'") || !strings.Contains(got, "Bearer my-secret-token") || strings.Contains(got, "# ") {
+		t.Fatalf("resolved: %s", got)
+	}
+
+	out.Reset()
+	if Export(&out, &errOut, ws, []string{"-curl", "-raw", "Auth API"}) != 0 {
+		t.Fatalf("folder: %s", errOut.String())
+	}
+	if got := out.String(); !strings.Contains(got, "# Bearer Token") || !strings.Contains(got, "{{token}}") {
+		t.Fatalf("raw folder: %s", got)
+	}
+
+	if Export(&out, &errOut, ws, []string{"-curl"}) != 2 || Export(&out, &errOut, ws, []string{"-curl", "Nope"}) != 2 {
+		t.Fatal("bad arguments should exit 2")
+	}
+}

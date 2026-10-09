@@ -39,6 +39,8 @@ func run(args []string) int {
 		fmt.Fprintf(out, "                                                save a curl command as a request (stdin when no args)\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] export [-o FILE] <Collection/Folder> | -env NAME | -globals\n")
 		fmt.Fprintf(out, "                                                export to Postman format\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] export -curl [-raw] <Collection/Request>...\n")
+		fmt.Fprintf(out, "                                                print requests as curl commands\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n\nFlags:\n")
 		fs.PrintDefaults()
 	}

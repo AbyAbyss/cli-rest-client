@@ -224,6 +224,12 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.importPostman()
 		case 'x':
 			a.exportSelected()
+		case 'y':
+			if _, r := a.selection(); r != nil {
+				a.copyCurl(*r)
+			} else {
+				a.setStatus(levelWarning, "Select a request to copy it as curl")
+			}
 		case 'K':
 			a.moveSelected(-1)
 		case 'J':
