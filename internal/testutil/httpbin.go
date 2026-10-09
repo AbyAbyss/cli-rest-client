@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/AbyAbyss/cli-rest-client/internal/models"
 )
 
 // NewHTTPBin starts a server implementing the httpbin endpoints used by the
@@ -67,6 +69,7 @@ func NewHTTPBin() *httptest.Server {
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "user": parts[0]})
 	})
 	addStreams(mux)
+	addGraphQL(mux)
 	return httptest.NewServer(mux)
 }
 
@@ -74,4 +77,13 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// UseLocal points the sample workspace's URL variables at a server from
+// NewHTTPBin, so its requests (including the GraphQL and SSE samples) run
+// without the internet.
+func UseLocal(ws *models.Workspace, base string) {
+	ws.SetVariable("baseUrl", base)
+	ws.SetVariable("graphqlUrl", base+"/graphql")
+	ws.SetVariable("sseUrl", base+"/sse?count=3&interval=10")
 }

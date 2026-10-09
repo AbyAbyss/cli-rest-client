@@ -105,8 +105,9 @@ func TestImportCollection(t *testing.T) {
 		t.Fatalf("formdata: %q", upload.Body)
 	}
 	gql := find(t, ws, "Shop API/GraphQL search")
-	if gql.URL != "https://shop.example.com/graphql" || gql.BodyType != models.BodyJSON || !strings.Contains(gql.Body, `"q": "lamp"`) {
-		t.Fatalf("graphql: %q %q", gql.URL, gql.Body)
+	if gql.URL != "https://shop.example.com/graphql" || gql.BodyType != models.BodyGraphQL ||
+		gql.Body != "query($q: String!) { search(q: $q) { id name } }" || gql.GraphQLVariables != `{"q": "lamp"}` {
+		t.Fatalf("graphql: %q %s %q %q", gql.URL, gql.BodyType, gql.Body, gql.GraphQLVariables)
 	}
 	if gql.Auth.Type != models.AuthAPIKey || gql.Auth.Key != "api_key" || gql.Auth.In != "query" {
 		t.Fatalf("apikey: %+v", gql.Auth)

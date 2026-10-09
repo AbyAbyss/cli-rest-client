@@ -204,6 +204,11 @@ func exportBody(r *models.Request) map[string]any {
 		}
 	case models.BodyForm:
 		return map[string]any{"mode": "urlencoded", "urlencoded": exportKVs(models.ParseKV(r.Body, "="))}
+	case models.BodyGraphQL:
+		return map[string]any{"mode": "graphql", "graphql": map[string]any{
+			"query":     exportDynamic(r.Body),
+			"variables": exportDynamic(r.GraphQLVariables),
+		}}
 	}
 	return nil
 }
@@ -331,6 +336,12 @@ func preLineToJS(line string) (string, bool) {
 	return "", false
 }
 
+// eventsJS counts the events of a streamed response like the app does:
+// SSE events with data, or non-empty NDJSON lines.
+const eventsJS = `((pm.response.headers.get("Content-Type") || "").includes("event-stream")` +
+	` ? pm.response.text().split(/\r?\n\r?\n|\r\r/).filter(b => /^data:/m.test(b)).length` +
+	` : pm.response.text().split(/\r?\n|\r/).filter(l => l.trim() !== "").length)`
+
 var reJSONPath = regexp.MustCompile(`^json((?:\.[A-Za-z_$][\w$]*|\[\d+\])*)$`)
 
 // subjectJS returns the JavaScript for a test subject and the remaining
@@ -348,6 +359,8 @@ func subjectJS(toks []string) (js string, rest []string, isHeader bool, header s
 		return "pm.response.responseSize", toks[1:], false, "", true
 	case t == "body":
 		return "pm.response.text()", toks[1:], false, "", true
+	case t == "events":
+		return eventsJS, toks[1:], false, "", true
 	case t == "header" && len(toks) >= 2:
 		return "pm.response.headers.get(" + jsString(toks[1]) + ")", toks[2:], true, toks[1], true
 	case reJSONPath.MatchString(t):

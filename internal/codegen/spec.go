@@ -216,10 +216,13 @@ func build(r models.Request, values map[string]string, template bool) (*Spec, er
 		}
 	}
 
-	if ct := contentTypes[r.BodyType]; ct != "" && !hasCT {
+	gqlGet := r.BodyType == models.BodyGraphQL && s.Method == "GET"
+	if ct := contentTypes[r.BodyType]; ct != "" && !hasCT && !gqlGet {
 		s.ContentType = ct
 	}
 	switch r.BodyType {
+	case models.BodyGraphQL:
+		b.graphQL(r, string(p.Body), gqlGet)
 	case models.BodyJSON:
 		if strings.TrimSpace(r.Body) == "" {
 			break
@@ -261,10 +264,52 @@ func build(r models.Request, values map[string]string, template bool) (*Spec, er
 }
 
 var contentTypes = map[string]string{
-	models.BodyJSON: "application/json",
-	models.BodyText: "text/plain; charset=utf-8",
-	models.BodyXML:  "application/xml",
-	models.BodyForm: "application/x-www-form-urlencoded",
+	models.BodyJSON:    "application/json",
+	models.BodyGraphQL: "application/json",
+	models.BodyText:    "text/plain; charset=utf-8",
+	models.BodyXML:     "application/xml",
+	models.BodyForm:    "application/x-www-form-urlencoded",
+}
+
+// graphQL fills in a GraphQL request: a JSON body {"query", "variables"}
+// for POST, or query and variables parameters for GET, as engine.Prepare
+// sends them. body is the body Prepare built (resolved mode).
+func (b *builder) graphQL(r models.Request, body string, get bool) {
+	s := b.spec
+	varsText := strings.TrimSpace(r.GraphQLVariables)
+	if get {
+		s.Query = append(s.Query, Field{lit("query"), b.str(r.Body)})
+		if varsText != "" {
+			if b.template {
+				v := b.str(varsText)
+				if n := b.parseTemplateJSON(varsText); n != nil {
+					v = compactJSON(n) // compacted like Prepare does, variables kept
+				}
+				s.Query = append(s.Query, Field{lit("variables"), v})
+			} else {
+				var buf bytes.Buffer
+				_ = json.Compact(&buf, []byte(b.resolve(varsText)))
+				s.Query = append(s.Query, Field{lit("variables"), lit(buf.String())})
+			}
+		}
+		return
+	}
+	s.BodyKind = BodyJSON
+	if !b.template {
+		s.Raw = lit(body)
+		s.JSON = b.parseJSON(body)
+		return
+	}
+	obj := &Node{Kind: NodeObject, Members: []Member{{lit("query"), &Node{Kind: NodeString, Str: b.str(r.Body)}}}}
+	if varsText != "" {
+		vars := b.parseTemplateJSON(varsText)
+		if vars == nil {
+			vars = &Node{Kind: NodeObject} // Prepare already rejected invalid variables
+		}
+		obj.Members = append(obj.Members, Member{lit("variables"), vars})
+	}
+	s.JSON = obj
+	s.Raw = compactJSON(obj)
 }
 
 // resolve substitutes variables, for decisions that need the final text.

@@ -686,6 +686,20 @@ func (a *App) showCode() {
 }
 
 func (a *App) formatBody() {
+	if a.req.BodyType == models.BodyGraphQL {
+		text := strings.TrimSpace(a.gqlVarsArea.GetText())
+		if text == "" {
+			return
+		}
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, []byte(text), "", "  "); err != nil {
+			a.setStatus(levelError, "Variables are not valid JSON: "+err.Error())
+			return
+		}
+		a.gqlVarsArea.SetText(buf.String(), false)
+		a.setStatus(levelSuccess, "Formatted the GraphQL variables")
+		return
+	}
 	text := strings.TrimSpace(a.bodyArea.GetText())
 	if text == "" {
 		return

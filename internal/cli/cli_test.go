@@ -21,7 +21,7 @@ func TestSampleWorkspace(t *testing.T) {
 	defer srv.Close()
 
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
 
 	var out, errOut bytes.Buffer

@@ -219,7 +219,7 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 	srv := testutil.NewHTTPBin()
 	defer srv.Close()
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "pm.js")
 	os.WriteFile(stub, []byte(pmStub), 0o644)
@@ -245,7 +245,11 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 		for k, v := range vars {
 			nativeVars[k] = v
 		}
-		native := script.RunTests(r.Tests, script.Response{Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration}, nativeVars)
+		var events []string
+		for _, e := range resp.Events {
+			events = append(events, e.Data)
+		}
+		native := script.RunTests(r.Tests, script.Response{Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events}, nativeVars)
 
 		res := &ExportResult{}
 		js := exportScript(r.Tests, false, res, r.Name)

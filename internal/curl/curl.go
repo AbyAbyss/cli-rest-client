@@ -3,7 +3,9 @@
 package curl
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -331,6 +333,11 @@ func parseArgs(args []string) (*Result, error) {
 			r.Body = body
 		}
 	}
+	if r.BodyType == models.BodyJSON {
+		if query, variables, ok := graphQLBody(r.Body); ok {
+			r.BodyType, r.Body, r.GraphQLVariables = models.BodyGraphQL, query, variables
+		}
+	}
 	if jsonBody {
 		if headerValue(r.Headers, "Content-Type") == "" {
 			r.Headers = append(r.Headers, models.KeyValue{Key: "Content-Type", Value: "application/json"})
@@ -607,4 +614,73 @@ func ansiC(s string) string {
 		}
 	}
 	return sb.String()
+}
+
+// graphQLBody recognises a GraphQL request body: a JSON object with a
+// "query" string and nothing but "variables" and "operationName" besides.
+// Variables come back indented; {{variables}} used as whole JSON values
+// survive.
+func graphQLBody(body string) (query, variables string, ok bool) {
+	protected, restore := protectBareVars(body)
+	var doc map[string]json.RawMessage
+	if json.Unmarshal([]byte(protected), &doc) != nil {
+		return "", "", false
+	}
+	for k := range doc {
+		if k != "query" && k != "variables" && k != "operationName" {
+			return "", "", false
+		}
+	}
+	if json.Unmarshal(doc["query"], &query) != nil || strings.TrimSpace(query) == "" {
+		return "", "", false
+	}
+	if v := doc["variables"]; len(v) > 0 && string(v) != "null" {
+		var buf bytes.Buffer
+		if json.Indent(&buf, v, "", "  ") != nil {
+			return "", "", false
+		}
+		variables = restore(buf.String())
+	}
+	return restore(query), variables, true
+}
+
+// protectBareVars quotes {{variables}} that stand outside JSON strings, so
+// the text parses; restore puts them back.
+func protectBareVars(text string) (string, func(string) string) {
+	var sb strings.Builder
+	var names []string
+	inString, escaped := false, false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if inString {
+			sb.WriteByte(c)
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+		}
+		if c == '{' && strings.HasPrefix(text[i:], "{{") {
+			if end := strings.Index(text[i:], "}}"); end > 0 {
+				fmt.Fprintf(&sb, `"\u0000%d\u0000"`, len(names))
+				names = append(names, text[i:i+end+2])
+				i += end + 1
+				continue
+			}
+		}
+		sb.WriteByte(c)
+	}
+	return sb.String(), func(s string) string {
+		for i, n := range names {
+			s = strings.ReplaceAll(s, fmt.Sprintf(`"\u0000%d\u0000"`, i), n)
+		}
+		return s
+	}
 }

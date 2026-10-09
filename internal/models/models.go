@@ -22,10 +22,12 @@ const (
 	BodyText = "text"
 	BodyXML  = "xml"
 	BodyForm = "form"
+	// BodyGraphQL sends Body as a GraphQL query, with GraphQLVariables.
+	BodyGraphQL = "graphql"
 )
 
 // BodyTypes lists the body types in the order shown in the Body tab.
-var BodyTypes = []string{BodyNone, BodyJSON, BodyText, BodyXML, BodyForm}
+var BodyTypes = []string{BodyNone, BodyJSON, BodyText, BodyXML, BodyForm, BodyGraphQL}
 
 // KeyValue is a single header, query parameter, form field or variable.
 // Disabled entries are kept but not sent.
@@ -49,16 +51,19 @@ type Auth struct {
 
 // Request is a saved (or in-progress) HTTP request.
 type Request struct {
-	Name       string     `json:"name"`
-	Method     string     `json:"method"`
-	URL        string     `json:"url"`
-	Params     []KeyValue `json:"params,omitempty"`
-	Headers    []KeyValue `json:"headers,omitempty"`
-	Auth       Auth       `json:"auth"`
-	BodyType   string     `json:"body_type"`
-	Body       string     `json:"body,omitempty"`
-	PreRequest string     `json:"pre_request,omitempty"`
-	Tests      string     `json:"tests,omitempty"`
+	Name     string     `json:"name"`
+	Method   string     `json:"method"`
+	URL      string     `json:"url"`
+	Params   []KeyValue `json:"params,omitempty"`
+	Headers  []KeyValue `json:"headers,omitempty"`
+	Auth     Auth       `json:"auth"`
+	BodyType string     `json:"body_type"`
+	Body     string     `json:"body,omitempty"`
+	// GraphQLVariables is the JSON object sent as "variables" with a
+	// GraphQL query (BodyGraphQL).
+	GraphQLVariables string `json:"graphql_variables,omitempty"`
+	PreRequest       string `json:"pre_request,omitempty"`
+	Tests            string `json:"tests,omitempty"`
 }
 
 // NewRequest returns an empty GET request with defaults filled in.
@@ -102,7 +107,8 @@ func (r Request) Clone() Request {
 // Equal reports whether two requests have the same content.
 func (r Request) Equal(o Request) bool {
 	if r.Name != o.Name || r.Method != o.Method || r.URL != o.URL || r.Auth != o.Auth ||
-		r.BodyType != o.BodyType || r.Body != o.Body || r.PreRequest != o.PreRequest || r.Tests != o.Tests {
+		r.BodyType != o.BodyType || r.Body != o.Body || r.GraphQLVariables != o.GraphQLVariables ||
+		r.PreRequest != o.PreRequest || r.Tests != o.Tests {
 		return false
 	}
 	return kvEqual(r.Params, o.Params) && kvEqual(r.Headers, o.Headers)

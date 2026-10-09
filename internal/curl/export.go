@@ -1,6 +1,8 @@
 package curl
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -51,6 +53,14 @@ func Template(r models.Request) *Command {
 	if r.Auth.Type == models.AuthAPIKey && r.Auth.In == "query" && r.Auth.Key != "" {
 		query = append(query, escapeQuery(r.Auth.Key)+"="+escapeQuery(r.Auth.Value))
 	}
+	gqlGet := r.BodyType == models.BodyGraphQL && r.Method == "GET"
+	gqlVars := compactTemplate(r.GraphQLVariables)
+	if gqlGet {
+		query = append(query, "query="+escapeQuery(r.Body))
+		if gqlVars != "" {
+			query = append(query, "variables="+escapeQuery(gqlVars))
+		}
+	}
 	if len(query) > 0 {
 		sep := "?"
 		if strings.Contains(full, "?") {
@@ -96,6 +106,9 @@ func Template(r models.Request) *Command {
 		models.BodyXML:  "application/xml",
 		models.BodyForm: "application/x-www-form-urlencoded",
 	}[r.BodyType]
+	if r.BodyType == models.BodyGraphQL && !gqlGet {
+		ct = "application/json"
+	}
 	if ct != "" && !hasCT {
 		lines = append(lines, "-H "+q("Content-Type: "+ct))
 	}
@@ -103,6 +116,14 @@ func Template(r models.Request) *Command {
 	case models.BodyJSON, models.BodyText, models.BodyXML:
 		if r.Body != "" {
 			lines = append(lines, "--data-raw "+q(r.Body))
+		}
+	case models.BodyGraphQL:
+		if !gqlGet {
+			body := `{"query":` + quoteJSON(r.Body)
+			if gqlVars != "" {
+				body += `,"variables":` + gqlVars
+			}
+			lines = append(lines, "--data-raw "+q(body+"}"))
 		}
 	case models.BodyForm:
 		var parts []string
@@ -141,4 +162,44 @@ func escapeQuery(s string) string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// quoteJSON quotes s as a JSON string, leaving {{variables}} readable.
+func quoteJSON(s string) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s)
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// compactTemplate removes insignificant whitespace from JSON that may hold
+// bare {{variables}} ({"n": {{count}}}), which json.Compact would reject.
+func compactTemplate(text string) string {
+	text = strings.TrimSpace(text)
+	var sb strings.Builder
+	inString, escaped := false, false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if inString {
+			sb.WriteByte(c)
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '"':
+			inString = true
+		}
+		sb.WriteByte(c)
+	}
+	return sb.String()
 }

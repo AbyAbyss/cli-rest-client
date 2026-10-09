@@ -16,7 +16,7 @@ import (
 
 var (
 	authLabels = []string{"No Auth", "Basic Auth", "Bearer Token", "API Key"}
-	bodyLabels = []string{"None", "JSON", "Text", "XML", "Form (urlencoded)"}
+	bodyLabels = []string{"None", "JSON", "Text", "XML", "Form (urlencoded)", "GraphQL"}
 	authInOpts = []string{"Header", "Query Params"}
 )
 
@@ -358,6 +358,7 @@ func (a *App) buildBodyTab() *tab {
 			return
 		}
 		a.req.BodyType = models.BodyTypes[i]
+		a.layoutBody()
 		a.requestChanged()
 	})
 	a.bodyArea = a.newArea("Body", "{\n  \"name\": \"{{name}}\"\n}")
@@ -368,15 +369,50 @@ func (a *App) buildBodyTab() *tab {
 		a.req.Body = a.bodyArea.GetText()
 		a.requestChanged()
 	})
+	a.gqlVarsArea = a.newArea("Variables · JSON", "{\n  \"code\": \"{{country}}\"\n}")
+	a.gqlVarsArea.SetChangedFunc(func() {
+		if a.loading {
+			return
+		}
+		a.req.GraphQLVariables = a.gqlVarsArea.GetText()
+		a.requestChanged()
+	})
+	a.bodyEditors = a.newFlex(tview.FlexColumn)
+	a.layoutBody()
 	page := a.newFlex(tview.FlexRow).
 		AddItem(a.bodyType, 1, 0, false).
-		AddItem(a.bodyArea, 0, 1, false).
+		AddItem(a.bodyEditors, 0, 1, false).
 		AddItem(a.newHint(func(t *Theme) string {
+			if a.req.BodyType == models.BodyGraphQL {
+				return hintLine(t, "F6 browses the schema and writes a query for you", "Ctrl+P formats the variables", "GET sends the query in the URL")
+			}
 			return hintLine(t, "Ctrl+P formats JSON", "Form: key=value per line", "{{var}} allowed")
 		}), 2, 0, false)
 	return &tab{name: "Body", page: page, focus: func() []tview.Primitive {
+		if a.req.BodyType == models.BodyGraphQL {
+			return []tview.Primitive{a.bodyType, a.bodyArea, a.gqlVarsArea}
+		}
 		return []tview.Primitive{a.bodyType, a.bodyArea}
 	}}
+}
+
+// layoutBody shows the query and variables editors side by side for
+// GraphQL, and the single body editor otherwise.
+func (a *App) layoutBody() {
+	if a.bodyEditors == nil {
+		return
+	}
+	focused := a.tv.GetFocus()
+	a.bodyEditors.Clear()
+	a.bodyEditors.AddItem(a.bodyArea, 0, 3, false)
+	if a.req.BodyType == models.BodyGraphQL {
+		a.bodyEditors.AddItem(a.gqlVarsArea, 0, 2, false)
+	} else if focused == a.gqlVarsArea {
+		a.tv.SetFocus(a.bodyType)
+	}
+	for _, r := range a.renderers {
+		r() // the hint line depends on the body type
+	}
 }
 
 func (a *App) buildPreRequestTab() *tab {
@@ -535,6 +571,8 @@ func (a *App) loadIntoBuilder(r models.Request, linked *models.Request) {
 	}
 	a.bodyType.SetCurrentOption(indexOf(models.BodyTypes, r.BodyType))
 	a.bodyArea.SetText(r.Body, false)
+	a.gqlVarsArea.SetText(r.GraphQLVariables, false)
+	a.layoutBody()
 	a.preArea.SetText(r.PreRequest, false)
 	a.testsArea.SetText(r.Tests, false)
 	a.refreshVariablesArea()
@@ -574,7 +612,11 @@ func (a *App) renderTitles() {
 		dirty = fmt.Sprintf(" [%s]●[-]", a.theme.HexWarning)
 	}
 	a.urlInput.SetTitle(fmt.Sprintf(" [%s]%s[-]%s ", a.theme.HexAccent, tview.Escape(where), dirty))
-	a.bodyArea.SetTitle(fmt.Sprintf(" Body · %s ", bodyLabels[indexOf(models.BodyTypes, a.req.BodyType)]))
+	if a.req.BodyType == models.BodyGraphQL {
+		a.bodyArea.SetTitle(" Query · GraphQL ")
+	} else {
+		a.bodyArea.SetTitle(fmt.Sprintf(" Body · %s ", bodyLabels[indexOf(models.BodyTypes, a.req.BodyType)]))
+	}
 }
 
 // urlField is the URL input with one extra trick: pasting a curl command

@@ -20,6 +20,7 @@ var helpSections = []helpSection{
 		{"Alt+S", "Save as a new request"},
 		{"Ctrl+N", "New empty request"},
 		{"Ctrl+P", "Pretty-print the JSON body"},
+		{"F6", "GraphQL: browse the schema of the URL and write a query for a field"},
 		{"Ctrl+G / F4", "Show the request as code (curl, Python, JavaScript, Go, HTTPie): ←/→ language, c copy, v toggles {{variables}}"},
 		{"Ctrl+O", "Import: paste a cURL command, or a Postman export's path"},
 		{"Paste cURL", "Pasting a curl command into the URL field turns it into a request"},
