@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1267,6 +1268,86 @@ func TestCurlImportUI(t *testing.T) {
 	h.do(func() {
 		if len(h.a.dialogs) != 0 || h.a.req.URL != "https://example.test/c" || len(h.a.req.Headers) != 1 {
 			t.Fatalf("continued command: %+v", h.a.req)
+		}
+	})
+}
+
+func TestCopyAsCurl(t *testing.T) {
+	h := start(t, nil)
+	var copied []string
+	h.do(func() {
+		h.a.copier = func(text string) (string, error) {
+			copied = append(copied, text)
+			return "test", nil
+		}
+	})
+
+	// y in the tree copies the selected request, with real values.
+	h.do(func() {
+		h.a.rebuildTree(reqAt(t, h.a.ws, "Auth API/Bearer Token"))
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyRune, 'y', 0)
+	h.do(func() {
+		if len(copied) != 1 || !strings.Contains(copied[0], "curl 'https://httpbin.org/bearer'") ||
+			!strings.Contains(copied[0], "-H 'Authorization: Bearer my-secret-token'") {
+			t.Fatalf("tree copy: %v", copied)
+		}
+		if !strings.Contains(h.a.status, `Copied "Bearer Token" as curl`) {
+			t.Fatalf("status %q", h.a.status)
+		}
+	})
+
+	// Ctrl+G shows the command; v switches to {{variables}}; c copies that.
+	h.do(func() {
+		r := reqAt(t, h.a.ws, "Payment Gateway/Charges/Charge")
+		h.a.loadIntoBuilder(*r, r)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlG, 0, tcell.ModCtrl)
+	if s := h.screenText(); !strings.Contains(s, "cURL · real values") || !strings.Contains(s, "pre-request script was applied") || !strings.Contains(s, `"orderId": "order-`) {
+		t.Fatalf("dialog:\n%s", s)
+	}
+	h.key(tcell.KeyRune, 'v', 0)
+	if s := h.screenText(); !strings.Contains(s, "{{variables}} kept") || !strings.Contains(s, "{{baseUrl}}/post") {
+		t.Fatalf("template view:\n%s", s)
+	}
+	h.key(tcell.KeyRune, 'c', 0)
+	h.do(func() {
+		if len(h.a.dialogs) != 0 || len(copied) != 2 || !strings.Contains(copied[1], "'{{baseUrl}}/post'") || !strings.Contains(copied[1], `"orderId": "{{orderId}}"`) {
+			t.Fatalf("template copy: %v", copied)
+		}
+		// The pre-request script must not have changed the saved variables.
+		if _, ok := h.a.ws.VariableMap()["orderId"]; ok {
+			t.Fatal("showing curl must not run the pre-request script for real")
+		}
+	})
+
+	// y in History copies an entry.
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	h.do(func() {
+		r := models.NewRequest("hist")
+		r.URL = srv.URL + "/get?x=1"
+		h.a.loadIntoBuilder(r, nil)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("history entry", func() bool { return len(h.a.history.Entries) == 1 })
+	h.key(tcell.KeyRune, 'h', tcell.ModAlt)
+	h.key(tcell.KeyRune, 'y', 0)
+	h.do(func() {
+		if len(copied) != 3 || !strings.Contains(copied[2], srv.URL+"/get?x=1") {
+			t.Fatalf("history copy: %v", copied)
+		}
+	})
+
+	// A clipboard failure is reported, not hidden.
+	h.do(func() {
+		h.a.copier = func(string) (string, error) { return "", errors.New("no clipboard") }
+		h.a.copyCurl(models.Request{Method: "GET", URL: "https://x.test"})
+		if !strings.Contains(h.a.status, "Could not copy: no clipboard") {
+			t.Fatalf("status %q", h.a.status)
 		}
 	})
 }

@@ -21,7 +21,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
 - **Import from cURL**: paste a curl command (from browser dev tools, API docs or Postman) into the URL field and it becomes a request, with headers, auth, body and params filled in.
 - **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
-- **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
+- **Copy as cURL**: `Ctrl+G` shows the current request as a curl command and `c` copies it to the clipboard; `y` copies a request straight from the Collections tree or History. Variables can be filled in or kept as `{{name}}`.
+- JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
 - **Headless mode**: `term-rest-client run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
@@ -198,7 +199,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Alt+S` | Save as a new request |
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body |
-| `Ctrl+G`, `F4` | Show the request as a cURL command |
+| `Ctrl+G`, `F4` | Show the request as a cURL command. In that window `c` copies it and `v` switches between real values and `{{variables}}` |
 | `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
@@ -218,6 +219,7 @@ In the **Collections tree**:
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
 | `i` | Import cURL or a Postman file (same as `Ctrl+O`) |
 | `x` | Export the selected collection or folder as a Postman collection |
+| `y` | Copy the selected request to the clipboard as a curl command |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
 | `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
@@ -273,6 +275,20 @@ Understood:
 | `-L`, `-s`, `-v`, `--compressed`, `-o`, `-m`, ... | Ignored (they don't change the request) |
 
 `-k`, bodies read from `@file`, and file uploads can't be carried over and are listed in a notes window.
+
+### Copying as cURL
+
+`Ctrl+G` (or `F4`) opens the current request as a curl command, ready to paste into a terminal, a bug report or a chat. In that window:
+
+- `c` copies it to the clipboard and closes the window;
+- `v` switches between **real values** (variables filled in from the active environment, auth and params applied, the pre-request script run on a scratch copy so nothing is saved) and **`{{variables}} kept`**, which is handy for docs or for sharing with someone who has their own environment;
+- `Esc` closes it.
+
+`y` on a request in the Collections tree, or on an entry in History, copies it with real values without opening anything. If a variable isn't defined the status bar says which one, and it stays as `{{name}}` in the command.
+
+The clipboard is reached through `pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux (whichever is installed), and `clip` on Windows or WSL. Over SSH, or when none of those exist, the app sends the text to your terminal with the OSC 52 escape sequence, which iTerm2, kitty, WezTerm, Alacritty, Windows Terminal and tmux (with `set -g set-clipboard on`) understand. macOS Terminal.app doesn't support OSC 52, so over SSH from Terminal.app open the window with `Ctrl+G` and select the text instead.
+
+From a terminal: `term-rest-client export -curl "Payment Gateway/Charges/Charge"` prints the command, `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
 
 ### Importing from Postman
 
@@ -345,6 +361,7 @@ Every request you send is recorded, like Postman's History tab. Switch the sideb
 | Arrows | Move through entries. The status bar shows the full URL, status, time and the saved request it came from |
 | `Enter` | Open it: the request goes into the builder as an unsaved copy and the response pane shows the response it got then, marked "From history" |
 | `s` | Save the entry to a collection or folder |
+| `y` | Copy the entry's request as a curl command |
 | `/` | Filter by text in the URL, method, status or request name. `c` clears the filter |
 | `d` (or `Delete`) | Delete the entry |
 | `X` | Clear all history, after confirmation |
@@ -443,6 +460,7 @@ term-rest-client history -n 10                          # the last 10 requests s
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
 term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
 term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
+term-rest-client export -curl "Auth API/Bearer Token"    # print a request as a curl command (-raw keeps {{variables}})
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
@@ -467,6 +485,7 @@ cli-rest-client/
 ├── cmd/term-rest-client/   # entry point, flags, list/run commands dispatch
 ├── internal/
 │   ├── cli/                # headless "list" and "run" commands
+│   ├── clipboard/          # copy text via pbcopy, wl-copy, xclip, xsel, clip or OSC 52
 │   ├── engine/             # builds http.Request from a saved request + variables, cURL export
 │   ├── models/             # workspace, collection and request types
 │   ├── script/             # pre-request and test script interpreter

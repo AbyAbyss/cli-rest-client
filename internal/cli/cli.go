@@ -370,8 +370,13 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	file := fs.String("o", "", "write to this file instead of standard output")
 	envName := fs.String("env", "", "export this environment")
 	globals := fs.Bool("globals", false, "export the global variables")
+	asCurl := fs.Bool("curl", false, "print saved requests as curl commands instead")
+	raw := fs.Bool("raw", false, "with -curl: keep {{variables}} instead of filling in values")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *asCurl {
+		return exportCurl(out, errOut, ws, fs.Args(), *raw)
 	}
 
 	var data []byte
@@ -421,6 +426,47 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	}
 	for _, n := range notes {
 		fmt.Fprintf(errOut, "note: %s\n", n)
+	}
+	return 0
+}
+
+// exportCurl prints the named requests (or every request under a named
+// collection or folder) as curl commands.
+func exportCurl(out, errOut io.Writer, ws *models.Workspace, names []string, raw bool) int {
+	if len(names) == 0 {
+		fmt.Fprintln(errOut, `export: name at least one request or folder ("Collection/Request")`)
+		return 2
+	}
+	var reqs []*models.Request
+	for _, n := range names {
+		found := find(ws, n)
+		if len(found) == 0 {
+			fmt.Fprintf(errOut, "export: no request, collection or folder named %q\n", n)
+			return 2
+		}
+		reqs = append(reqs, found...)
+	}
+	for i, r := range reqs {
+		var cmd *curl.Command
+		if raw {
+			cmd = curl.Template(*r)
+		} else {
+			var err error
+			if cmd, err = curl.Resolved(*r, ws.VariableMap()); err != nil {
+				fmt.Fprintf(errOut, "export: %s: %v\n", r.Name, err)
+				return 1
+			}
+		}
+		if len(reqs) > 1 {
+			if i > 0 {
+				fmt.Fprintln(out)
+			}
+			fmt.Fprintf(out, "# %s\n", r.Name)
+		}
+		fmt.Fprintln(out, cmd.Text)
+		if len(cmd.Missing) > 0 {
+			fmt.Fprintf(errOut, "warning: %s: undefined variable(s): %s\n", r.Name, strings.Join(cmd.Missing, ", "))
+		}
 	}
 	return 0
 }

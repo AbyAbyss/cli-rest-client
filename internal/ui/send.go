@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
@@ -424,17 +425,105 @@ func (a *App) renderResponse() {
 	a.response.SetText(sb.String())
 }
 
-func (a *App) showCurl() {
-	p, err := engine.Prepare(a.req, a.ws.VariableMap())
+// curlFor renders r as a curl command: with real values (as Send would
+// send it, pre-request script applied) or as a template keeping
+// {{variables}}.
+func (a *App) curlFor(r models.Request, template bool) (*curl.Command, error) {
+	if template {
+		return curl.Template(r), nil
+	}
+	return curl.Resolved(r, a.ws.VariableMap())
+}
+
+// copyText puts text on the clipboard and reports how it went.
+func (a *App) copyText(text, what string) {
+	how, err := a.copier(text)
+	if err != nil {
+		a.setStatus(levelError, "Could not copy: "+err.Error())
+		return
+	}
+	a.setStatus(levelSuccess, fmt.Sprintf("Copied %s to the clipboard (via %s)", what, how))
+}
+
+// copyCurl copies r as a ready-to-run curl command.
+func (a *App) copyCurl(r models.Request) {
+	cmd, err := a.curlFor(r, false)
 	if err != nil {
 		a.setStatus(levelError, "Cannot build cURL: "+err.Error())
 		return
 	}
-	note := ""
-	if strings.TrimSpace(a.req.PreRequest) != "" {
-		note = fmt.Sprintf("\n\n[%s]Note: the pre-request script is not run for this preview.", a.theme.HexMuted)
+	name := r.Name
+	if name == "" {
+		name = r.Method + " request"
 	}
-	a.showText("cURL · Esc to close", tview.Escape(p.Curl())+note, 90, 20)
+	a.copyText(cmd.Text, fmt.Sprintf("%q as curl", name))
+	if len(cmd.Missing) > 0 {
+		a.setStatus(levelWarning, fmt.Sprintf("Copied, but {{%s}} has no value", strings.Join(cmd.Missing, "}}, {{")))
+	}
+}
+
+// showCurl shows the request being edited as a curl command. c copies it,
+// v switches between real values and {{variables}}.
+func (a *App) showCurl() {
+	req := a.req.Clone()
+	template := false
+	t := a.theme
+	tv := tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true)
+	tv.SetBackgroundColor(t.Input)
+	tv.SetTextColor(t.Text)
+	tv.SetBorder(true).SetBorderColor(t.Focus).SetTitleColor(t.Title).SetBorderPadding(1, 1, 2, 2)
+
+	var current string
+	render := func() bool {
+		cmd, err := a.curlFor(req, template)
+		if err != nil {
+			a.setStatus(levelError, "Cannot build cURL: "+err.Error())
+			return false
+		}
+		current = cmd.Text
+		mode := "real values"
+		other := "{{variables}}"
+		if template {
+			mode, other = "{{variables}} kept", "real values"
+		}
+		tv.SetTitle(" cURL · " + tview.Escape(mode) + " ")
+		var sb strings.Builder
+		sb.WriteString(tview.Escape(cmd.Text))
+		if len(cmd.Missing) > 0 {
+			fmt.Fprintf(&sb, "\n\n[%s]No value for {{%s}}", t.HexWarning, tview.Escape(strings.Join(cmd.Missing, "}}, {{")))
+		}
+		if !template && strings.TrimSpace(req.PreRequest) != "" {
+			fmt.Fprintf(&sb, "\n\n[%s]The pre-request script was applied (nothing was saved).", t.HexMuted)
+		}
+		fmt.Fprintf(&sb, "\n\n[%s::b]c[-:-:-] [%s]copy   [%s::b]v[-:-:-] [%s]show %s   [%s::b]Esc[-:-:-] [%s]close",
+			t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, tview.Escape(other), t.HexAccent, t.HexMuted)
+		tv.SetText(sb.String())
+		tv.ScrollToBeginning()
+		return true
+	}
+	if !render() {
+		return
+	}
+	tv.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case ev.Key() == tcell.KeyEsc || ev.Key() == tcell.KeyEnter || (ev.Key() == tcell.KeyRune && ev.Rune() == 'q'):
+			a.closeDialog()
+		case ev.Key() == tcell.KeyRune && (ev.Rune() == 'c' || ev.Rune() == 'y'):
+			a.closeDialog()
+			what := "the curl command"
+			if template {
+				what = "the curl command (with {{variables}})"
+			}
+			a.copyText(current, what)
+		case ev.Key() == tcell.KeyRune && ev.Rune() == 'v':
+			template = !template
+			render()
+		default:
+			return ev
+		}
+		return nil
+	})
+	a.openDialog(tv, 96, 24)
 }
 
 func (a *App) formatBody() {
