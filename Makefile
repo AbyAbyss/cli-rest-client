@@ -1,4 +1,4 @@
-.PHONY: build run test test-coverage vet clean fmt lint install uninstall build-mac-universal screenshots deps update-deps build-all build-linux build-windows build-darwin help
+.PHONY: release build run test test-coverage vet clean fmt lint install uninstall build-mac-universal screenshots deps update-deps build-all build-linux build-windows build-darwin help
 
 # Application name
 APP_NAME := term-rest-client
@@ -100,6 +100,9 @@ update-deps: ## Update dependencies
 	$(GOMOD) get -u ./...
 	$(GOMOD) tidy
 	@echo "Dependencies updated"
+
+release: ## Build release archives for every platform into dist/ (VERSION=v1.2.3 to set the version)
+	./scripts/release.sh $(VERSION)
 
 # Cross-compilation targets
 build-all: ## Build for all platforms

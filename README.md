@@ -46,9 +46,23 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 ## Quick Start
 
+### Download a prebuilt binary (no Go needed)
+
+On macOS (Apple Silicon or Intel) or Linux (x86_64 or arm64):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AbyAbyss/cli-rest-client/main/get.sh | sh
+```
+
+It downloads the right binary from the [latest release](https://github.com/AbyAbyss/cli-rest-client/releases/latest), checks it against the release's `SHA256SUMS`, and installs it to `/usr/local/bin`, `/opt/homebrew/bin` or `~/.local/bin` (whichever is writable first; `INSTALL_DIR=...` to choose). `VERSION=v0.2.0` installs a specific release. On Windows, download `term-rest-client-windows-amd64.zip` from the releases page and put `term-rest-client.exe` somewhere on your `PATH`.
+
+If you download a macOS archive with a browser instead, macOS marks it as quarantined and refuses to open an unsigned binary. Clear the flag once with `xattr -d com.apple.quarantine term-rest-client`. Files fetched with `curl` (as above) aren't marked.
+
+### Build from source
+
 You need Go 1.24 or newer and a terminal with 256-colour (ideally true-colour) support.
 
-### macOS: install as a command you can run from any terminal
+#### macOS: install as a command you can run from any terminal
 
 ```bash
 # 1. Install Go (skip if `go version` already works)
@@ -97,7 +111,7 @@ echo "alias rest='term-rest-client'" >> ~/.zshrc && source ~/.zshrc
 rest
 ```
 
-### Linux: install as a command you can run from any terminal
+#### Linux: install as a command you can run from any terminal
 
 **1. Install the tools.** You need `git`, `make` and Go 1.21 or newer (Go downloads the 1.24 toolchain this project uses by itself). Distro Go packages are often older than that, so check with `go version` after installing.
 
@@ -149,7 +163,7 @@ scp dist/term-rest-client-linux-amd64 user@server:~/.local/bin/term-rest-client
 
 Over SSH the UI works in any terminal; `term-rest-client run ...` is handy for scripted checks on servers.
 
-### Windows
+#### Windows
 
 ```cmd
 build.bat
@@ -158,7 +172,7 @@ bin\term-rest-client.exe
 
 See [docs/WINDOWS.md](docs/WINDOWS.md) for PowerShell and other options.
 
-### With `go install`
+#### With `go install`
 
 ```bash
 go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
@@ -546,7 +560,10 @@ make vet
 make fmt
 make lint     # needs golangci-lint
 make screenshots  # regenerate assets/screenshots (needs Node + Playwright)
+make release  # build release archives for every platform into dist/ (VERSION=v1.2.3)
 ```
+
+To publish a release, push a version tag (`git tag v0.2.0 && git push origin v0.2.0`) or run the **Release** workflow from the Actions tab. It runs the tests, builds macOS (arm64, amd64), Linux (amd64, arm64) and Windows (amd64) archives with `scripts/release.sh`, and attaches them with a `SHA256SUMS` file to a GitHub release whose notes come from the Unreleased section of the changelog. `get.sh` installs from the latest release.
 
 The screenshots are generated, not hand-made: `make screenshots` drives the real UI on a simulated terminal against a local httpbin clone, writes each frame as HTML with the exact colors the app drew, and Playwright turns those into PNGs. Rerun it after UI changes.
 
