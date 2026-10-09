@@ -210,6 +210,9 @@ func SampleWorkspace() *models.Workspace {
 			{Name: "Local", Variables: []models.KeyValue{
 				{Key: "baseUrl", Value: "http://localhost:8080"},
 				{Key: "token", Value: "local-dev-token"},
+				{Key: "graphqlUrl", Value: "http://localhost:8080/graphql"},
+				{Key: "sseUrl", Value: "http://localhost:8080/sse"},
+				{Key: "wsUrl", Value: "ws://localhost:8080/ws"},
 			}},
 		},
 		ActiveEnvironment: "httpbin.org",

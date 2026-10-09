@@ -74,10 +74,10 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	activeBefore := ws.ActiveEnvironment
 	if *envName != "" {
 		defer func() { ws.ActiveEnvironment = activeBefore }()
-		if strings.EqualFold(*envName, "none") {
+		if isGlobalsOnly(*envName) {
 			ws.SetActive("")
 		} else if ws.Environment(*envName) == nil {
-			fmt.Fprintf(errOut, "run: no environment named %q (see the env command)\n", *envName)
+			fmt.Fprintf(errOut, "run: no environment named %q\n%s\n", *envName, envHint(ws))
 			return 2
 		} else {
 			ws.SetActive(*envName)
@@ -92,7 +92,7 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	for _, name := range fs.Args() {
 		found := find(ws, name)
 		if len(found) == 0 {
-			fmt.Fprintf(errOut, "run: no request or collection named %q\n", name)
+			fmt.Fprintf(errOut, "run: no request, collection or folder named %q\n%s\n", name, pathHint(ws, name))
 			return 2
 		}
 		targets = append(targets, found...)
@@ -350,10 +350,10 @@ func Env(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	}
 	name := strings.Join(args, " ")
 	switch {
-	case strings.EqualFold(name, "none"):
+	case isGlobalsOnly(name):
 		ws.SetActive("")
 	case ws.Environment(name) == nil:
-		fmt.Fprintf(errOut, "env: no environment named %q\n", name)
+		fmt.Fprintf(errOut, "env: no environment named %q\n%s\n", name, strings.Replace(envHint(ws), "-env ", "env ", -1))
 		return 2
 	default:
 		ws.SetActive(name)
@@ -461,7 +461,7 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	case fs.NArg() == 1:
 		c := findCollection(ws, fs.Arg(0))
 		if c == nil {
-			fmt.Fprintf(errOut, "export: no collection or folder named %q\n", fs.Arg(0))
+			fmt.Fprintf(errOut, "export: no collection or folder named %q\n%s\n", fs.Arg(0), pathHint(ws, fs.Arg(0)))
 			return 2
 		}
 		var res *postman.ExportResult
@@ -509,7 +509,7 @@ func exportCode(out, errOut io.Writer, ws *models.Workspace, lang string, names 
 	for _, n := range names {
 		found := find(ws, n)
 		if len(found) == 0 {
-			fmt.Fprintf(errOut, "export: no request, collection or folder named %q\n", n)
+			fmt.Fprintf(errOut, "export: no request, collection or folder named %q\n%s\n", n, pathHint(ws, n))
 			return 2
 		}
 		reqs = append(reqs, found...)
@@ -595,7 +595,7 @@ func Curl(in io.Reader, out, errOut io.Writer, ws *models.Workspace, store *stor
 	var parent *models.Collection
 	if into != "" {
 		if parent = findCollection(ws, into); parent == nil {
-			fmt.Fprintf(errOut, "curl: no collection or folder named %q\n", into)
+			fmt.Fprintf(errOut, "curl: no collection or folder named %q\n%s\n", into, pathHint(ws, into))
 			return 2
 		}
 	}

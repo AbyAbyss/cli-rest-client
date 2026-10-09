@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   auth in the handshake, send the Body tab as messages, and watch a live sent/received
   log; tests run on the received messages when the connection ends. `run` connects,
   sends and collects replies for CI. Snippets in JavaScript, Python, Go and websocat.
+- `term-rest-client demo` serves a local demo API (httpbin-like, plus SSE, GraphQL and
+  WebSocket) that the sample workspace's Local environment points at, so the samples
+  and the documented commands work offline with `-data demo.json`.
+- `run` explains unknown names: it lists the workspace's environments, suggests close
+  request and folder paths, and points at the sample workspace when the path is one of
+  its requests. `-env global` / `globals` mean the global variables, like `none`.
 - Sample "API Types" collection: GraphQL (countries API), SSE (Wikimedia live edits)
   and WebSocket (Postman echo).
 

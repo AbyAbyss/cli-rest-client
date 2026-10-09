@@ -187,6 +187,20 @@ go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
 
 This puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`), which needs to be on your `PATH`.
 
+### Try it with the samples
+
+A new workspace file starts with sample collections: a user service, auth, payments, and GraphQL, SSE and WebSocket examples. `term-rest-client demo` runs a small local server that answers all of them, so you can try everything offline without touching your own workspace:
+
+```bash
+term-rest-client demo                    # leave this running (Ctrl+C stops it)
+
+# in another terminal
+term-rest-client -data demo.json         # the app, with its own sample workspace
+term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
+```
+
+The sample's **Local** environment points at the demo server (`localhost:8080`); **httpbin.org** uses the public httpbin.org instead. `-addr localhost:9090` runs the demo on another port.
+
 ### First run
 
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
@@ -575,7 +589,8 @@ term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in 
 term-rest-client run "Health Check"                     # a top-level request
 term-rest-client run -env Local "User Service"          # use a different environment for this run
 term-rest-client env                                    # list environments (* marks the active one)
-term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
+term-rest-client env Staging                            # switch the active environment ("none" or "global" for Globals only)
+term-rest-client demo                                   # local demo server for the sample workspace's Local environment
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
 term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
@@ -585,7 +600,7 @@ term-rest-client export -lang go "Auth API/Login"        # or as python, javascr
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it). `-stream DURATION` sets how long streams and WebSockets are followed (the timeout setting by default); see [Streaming responses](#streaming-responses-server-sent-events-ndjson) and [WebSocket](#websocket).
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them, and a path that matches nothing gets suggestions. The examples above use the sample workspace; see [Try it with the samples](#try-it-with-the-samples) to run them as they are. `-env none` (or `-env global`) uses the global variables only. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it). `-stream DURATION` sets how long streams and WebSockets are followed (the timeout setting by default); see [Streaming responses](#streaming-responses-server-sent-events-ndjson) and [WebSocket](#websocket).
 
 ## Where data is stored
 
@@ -613,7 +628,8 @@ cli-rest-client/
 │   ├── models/             # workspace, collection and request types
 │   ├── script/             # pre-request and test script interpreter
 │   ├── storage/            # workspace file load/save, sample workspace
-│   ├── testutil/           # local httpbin clone used by tests, with SSE, GraphQL and WebSocket endpoints
+│   ├── demoserver/         # local httpbin-like API with SSE, GraphQL and WebSocket (tests and `demo`)
+│   ├── testutil/           # starts the demo server for tests
 │   ├── ui/                 # terminal UI (tview)
 │   └── vars/               # {{variable}} substitution
 ├── pkg/httpclient/         # HTTP client with timing, redirects, TLS, cancel and live streams (SSE, NDJSON)

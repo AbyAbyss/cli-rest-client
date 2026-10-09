@@ -2,9 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -359,4 +363,100 @@ func TestRunWebSocket(t *testing.T) {
 	if d := time.Since(start); d > 4*time.Second {
 		t.Errorf("run should stop when it goes quiet, took %s", d)
 	}
+}
+
+func TestHelpfulErrors(t *testing.T) {
+	// A workspace like an older one: no environments, a flat collection.
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	get := models.NewRequest("Get JSON")
+	login := models.NewRequest("Login")
+	ws.Collections = []*models.Collection{{Name: "User Service", Requests: []*models.Request{&get}}, {Name: "Auth API", Requests: []*models.Request{&login}}}
+
+	var out, errOut bytes.Buffer
+	if Run(&out, &errOut, ws, nil, []string{"-env", "Local", "Auth API"}) != 2 || !strings.Contains(errOut.String(), "This workspace has no environments") {
+		t.Fatalf("env hint: %s", errOut.String())
+	}
+	errOut.Reset()
+	if Run(&out, &errOut, ws, nil, []string{"User Service/Lookup"}) != 2 {
+		t.Fatal("unknown path should exit 2")
+	}
+	msg := errOut.String()
+	for _, want := range []string{"Did you mean:\n  User Service\n  User Service/Get JSON", "That path is in the sample workspace", "-data demo.json list", "term-rest-client list"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("missing %q in:\n%s", want, msg)
+		}
+	}
+
+	// -env global (and globals, none) means the global variables only.
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	login.URL = srv.URL + "/get"
+	ws.Environments = []*models.Environment{{Name: "Staging"}}
+	for _, name := range []string{"global", "Globals", "none"} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(&out, &errOut, ws, nil, []string{"-env", name, "Auth API"}); code != 0 {
+			t.Fatalf("-env %s: exit %d %s", name, code, errOut.String())
+		}
+	}
+	errOut.Reset()
+	Run(&out, &errOut, ws, nil, []string{"-env", "Local", "Auth API"})
+	if !strings.Contains(errOut.String(), `Environments in this workspace: "Staging"`) {
+		t.Fatalf("env list: %s", errOut.String())
+	}
+}
+
+func TestDemoServer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var out, errOut syncBuffer
+	done := make(chan int)
+	go func() { done <- Demo(ctx, &out, &errOut, []string{"-addr", "127.0.0.1:0"}) }()
+
+	var base string
+	for i := 0; i < 100 && base == ""; i++ {
+		if m := regexp.MustCompile(`Demo server on (http://\S+)`).FindStringSubmatch(out.String()); m != nil {
+			base = m[1]
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if base == "" {
+		t.Fatalf("no address printed: %s %s", out.String(), errOut.String())
+	}
+	// The sample workspace runs against it, Local-style.
+	ws := storage.SampleWorkspace()
+	testutil.UseLocal(ws, base)
+	var runOut, runErr bytes.Buffer
+	if code := Run(&runOut, &runErr, ws, nil, []string{"Auth API", "User Service/Lookup", "API Types"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, runOut.String(), runErr.String())
+	}
+	cancel()
+	if code := <-done; code != 0 || !strings.Contains(out.String(), "Demo server stopped.") {
+		t.Fatalf("exit %d: %s %s", code, out.String(), errOut.String())
+	}
+
+	// A busy port is explained.
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer l.Close()
+	var e2 bytes.Buffer
+	if Demo(context.Background(), &out, &e2, []string{"-addr", l.Addr().String()}) != 1 || !strings.Contains(e2.String(), "already in use") {
+		t.Fatalf("busy port: %s", e2.String())
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for one writer and one reader.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

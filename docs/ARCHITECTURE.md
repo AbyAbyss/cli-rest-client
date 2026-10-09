@@ -16,7 +16,8 @@ internal/clipboard     Copy(text): pbcopy / wl-copy / xclip / xsel / clip, OSC 5
 internal/postman       Postman import and export (collections, environments, globals)
 internal/cli           headless commands (list, run, env, import, export, curl, history)
 internal/ui            tview application
-internal/testutil      httpbin-compatible test server
+internal/demoserver    httpbin-like server with SSE, GraphQL and WebSocket endpoints (tests and `demo`)
+internal/testutil      starts the demo server for tests; UseLocal points the samples at it
 pkg/httpclient         http.Client wrapper: timeout, redirects, TLS, cancellation, timing, live streams
 pkg/wsclient           WebSocket connections (coder/websocket): handshake from a prepared request, messages in and out
 ```
