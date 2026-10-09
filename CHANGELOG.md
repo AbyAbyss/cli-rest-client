@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Import from cURL: paste a curl command into the URL field (or `Ctrl+O`) to get a
+  request with method, params, headers, auth and body; several commands become a
+  collection. Handles browser "Copy as cURL" output ($'...' quoting, continuations,
+  --data-raw, --compressed, cookies), -u / bearer headers to Auth, --json, -G, -F,
+  --data-urlencode. CLI: `term-rest-client curl` and curl files in `import`.
+- Export to Postman: collections and folders as Collection v2.1 files (`x` in the tree),
+  environments and globals (Export button in the Variables tab), and
+  `term-rest-client export`. Requests imported from Postman get their original scripts
+  back; scripts written here are translated into `pm.test` JavaScript with matching
+  comparison rules. Import and export round-trip.
+- Import from Postman: collections v2.0/v2.1 (nested folders, inherited auth, raw /
+  urlencoded / form-data / GraphQL bodies, query and path variables, collection
+  variables), environments and globals. Common test/pre-request script patterns are
+  converted; the original JavaScript is kept as comments. `Ctrl+O` (or `i` in the
+  tree) in the app, `term-rest-client import FILE...` on the command line.
+- Environments, like Postman: named variable sets layered over Globals. Environment
+  picker next to the URL and `Alt+E` to switch; the Variables tab edits Globals or any
+  environment and can create, rename, duplicate, delete and activate them. The response
+  pane and History show which environment was used. CLI: `run -env NAME` and
+  `env [NAME|none]`. Sample workspace has httpbin.org and Local environments.
+- Request history, like Postman: a History view in the sidebar (Alt+H / Alt+C / F3,
+  or click), grouped by day. Open an entry to get the request back with the response
+  it got, save it to a collection, filter, delete, or clear all. Stored in
+  `<workspace>.history.json`; newest 200 entries, bodies up to 64 KB; can be turned
+  off in Settings. `term-rest-client history [-n N]` lists it.
+- Response pane shows the request headers that were actually sent (including
+  Authorization, Content-Type, User-Agent, Host, Content-Length, Accept-Encoding).
+- Tests, Request Headers, Response Headers and Body are foldable sections: keys
+  `t` / `r` / `h` / `b` in the response pane, or click the heading. Choices are saved.
+- `run -v` prints sent (`>`) and received (`<`) headers like `curl -v`.
 - Folders inside collections, nested to any depth, and requests at the top level outside
   any collection (like Postman). New tree keys: `f` new folder, `m` move to another
   collection/folder/top level; `Left` on a request jumps to its folder.

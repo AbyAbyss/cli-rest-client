@@ -9,6 +9,8 @@ internal/storage       JSON workspace file: Load, atomic Save, DefaultPath, Samp
 internal/vars          {{name}} substitution and dynamic variables ($uuid, $timestamp, ...)
 internal/engine        Prepare(Request, vars) -> *http.Request (+ missing vars, warnings); Curl()
 internal/script        RunPre (set/unset) and RunTests (assertions and captures)
+internal/curl          curl command line parser (shell quoting, curl options -> Request)
+internal/postman       Postman import and export (collections, environments, globals)
 internal/cli           headless "list" and "run" commands
 internal/ui            tview application
 internal/testutil      httpbin-compatible test server
@@ -53,6 +55,14 @@ A few rules keep keyboard handling predictable:
 The workspace file is written with a temp file and rename, so a crash can't leave a half-written file. It is saved after every collection change, save, settings change, variable capture, when leaving the Variables tab, and on quit. On quit the builder state is stored as `Workspace.Draft` together with the location of the saved request it came from (folder indices from the top plus the request index, see `Workspace.Location`), and restored on the next start.
 
 Collections form a tree: `Collection.Folders` holds nested collections (shown as folders) and `Workspace.Requests` holds top-level requests. Code that needs "the list this item lives in" uses `Workspace.RequestsIn(parent)` / `FoldersIn(parent)`, where a nil parent means the top level, so the same code handles every level.
+
+## Environments
+
+`Workspace.Variables` are the globals; `Workspace.Environments` are named sets and `ActiveEnvironment` names the active one. `VariableMap()` merges globals with the active environment on top, and everything that resolves variables (engine, scripts, CLI) goes through it. `SetVariable` updates a variable where it already lives (active environment first, then globals) and puts new ones in the active environment, so script captures land where you'd expect. `ui/env.go` holds the picker and the Variables tab's environment manager.
+
+## History
+
+`models.History` (newest first, capped at 200 entries, bodies cut at 64 KB) is saved by `storage.Store.SaveHistory` to `<workspace>.history.json`, separate from the workspace. `ui/send.go` records an entry in `finish` for every request that got a response or failed on the network (not for cancelled ones or ones that never left, such as an empty URL). `ui/history.go` draws the sidebar view and rebuilds a `sendResult` from an entry, so the response pane renders history exactly like a live response.
 
 ## Testing
 

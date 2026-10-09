@@ -137,6 +137,49 @@ func (a *App) formDialog(title, hint string, items []tview.Primitive, submit fun
 	a.tv.SetFocus(items[0])
 }
 
+// textDialog asks for text that may span several lines (pasted commands).
+// Enter submits unless the text ends with a "\" line continuation, so a
+// multi-line command typed (or pasted without bracketed paste) still works.
+func (a *App) textDialog(title, hint, initial string, submit func(string)) {
+	t := a.theme
+	area := tview.NewTextArea().SetText(initial, true)
+	area.SetBackgroundColor(t.Background)
+	area.SetTextStyle(tcell.StyleDefault.Background(t.Background).Foreground(t.Text))
+	area.SetWordWrap(false)
+
+	hintView := tview.NewTextView().SetDynamicColors(true).SetWrap(true).
+		SetText(fmt.Sprintf("[%s]%s", t.HexMuted, tview.Escape(hint)))
+	hintView.SetBackgroundColor(t.Input)
+
+	box := newPanel(t.Input)
+	box.SetDirection(tview.FlexRow)
+	box.SetBorder(true).SetBorderColor(t.Focus).SetTitleColor(t.Title).SetBorderPadding(1, 0, 2, 2)
+	box.SetTitle(" " + title + " ")
+	box.AddItem(area, 0, 1, true).AddItem(nil, 1, 0, false).AddItem(hintView, 2, 0, false)
+
+	area.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyEsc:
+			a.closeDialog()
+			return nil
+		case tcell.KeyEnter:
+			text := area.GetText()
+			if strings.HasSuffix(strings.TrimRight(text, " \t"), "\\") {
+				return ev // line continuation: keep typing
+			}
+			if strings.TrimSpace(text) == "" {
+				return nil
+			}
+			a.closeDialog()
+			submit(text)
+			return nil
+		}
+		return ev
+	})
+	a.openDialog(box, 96, 14)
+	a.tv.SetFocus(area)
+}
+
 // prompt asks for a single non-empty line of text.
 func (a *App) prompt(title, label, initial string, ok func(string)) {
 	input := tview.NewInputField().SetLabel(label + "  ").SetText(initial)

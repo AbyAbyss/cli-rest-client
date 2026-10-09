@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 )
@@ -47,19 +48,32 @@ type App struct {
 	rightCol   *tview.Flex
 	contentRow *tview.Flex
 	tree       *tview.TreeView
-	methodDrop *tview.DropDown
-	urlInput   *tview.InputField
-	sendBtn    *tview.Button
-	tabBar     *tview.TextView
-	tabPages   *tview.Pages
-	tabs       []*tab
-	activeTab  int
-	response   *tview.TextView
-	statusMsg  *tview.TextView
-	statusKeys *tview.TextView
+	// Sidebar: Collections tree or History list.
+	sideBar          *tview.TextView
+	sidePages        *tview.Pages
+	sideView         string
+	historyView      *tview.TreeView
+	history          *models.History
+	historyFilter    string
+	historyCollapsed map[string]bool
+	methodDrop       *tview.DropDown
+	envDrop          *tview.DropDown
+	urlInput         *tview.InputField
+	sendBtn          *tview.Button
+	tabBar           *tview.TextView
+	tabPages         *tview.Pages
+	tabs             []*tab
+	activeTab        int
+	response         *tview.TextView
+	statusMsg        *tview.TextView
+	statusKeys       *tview.TextView
 
 	// Tab editors.
 	paramsArea, headersArea, bodyArea, preArea, testsArea, varsArea *tview.TextArea
+	varsTarget                                                      *tview.DropDown
+	envButtons                                                      []*tview.Button
+	editingEnv                                                      string
+	lastImportDir                                                   string
 	bodyType                                                        *tview.DropDown
 	authType, authIn                                                *tview.DropDown
 	authUser, authPass, authToken, authKey, authValue               *tview.InputField
@@ -107,14 +121,25 @@ func New(ws *models.Workspace, store *storage.Store, info BuildInfo) *App {
 		info:      info,
 		theme:     theme,
 		collapsed: map[*models.Collection]bool{},
+
+		history:          &models.History{},
+		historyCollapsed: map[string]bool{},
+	}
+	var historyErr error
+	if store != nil {
+		a.history, historyErr = store.LoadHistory()
 	}
 	a.setGlobalStyles()
 	a.build()
 	a.restoreDraft()
+	a.refreshEnvPicker()
 	a.applyTheme()
 	a.rebuildTree(a.linked)
 	a.renderResponse()
 	a.setStatus(levelInfo, "Ready. Press F1 for help.")
+	if historyErr != nil {
+		a.setStatus(levelWarning, "History not loaded: "+historyErr.Error())
+	}
 	return a
 }
 
@@ -131,6 +156,7 @@ func (a *App) Run() error {
 func (a *App) build() {
 	a.buildTree()
 	a.buildRequestBar()
+	a.buildEnvPicker()
 	a.buildTabs()
 	a.buildResponse()
 	a.buildStatusBar()
@@ -142,13 +168,20 @@ func (a *App) build() {
 	a.rightCol = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(a.methodDrop, 13, 0, false).
-			AddItem(a.urlInput, 0, 1, true).
+			AddItem(&urlField{InputField: a.urlInput, onPaste: func(text string) bool {
+				if !curl.LooksLikeCurl(text) {
+					return false
+				}
+				a.importCurl(text, true)
+				return true
+			}}, 0, 1, true).
+			AddItem(a.envDrop, 22, 0, false).
 			AddItem(a.sendBtn, 10, 0, false), 3, 0, true).
 		AddItem(a.tabBar, 1, 0, false).
 		AddItem(a.contentRow, 0, 1, false)
 
 	body := tview.NewFlex().
-		AddItem(a.tree, 34, 0, false).
+		AddItem(a.buildSidebar(), 34, 0, false).
 		AddItem(a.rightCol, 0, 1, true)
 
 	status := tview.NewFlex().
@@ -197,7 +230,7 @@ func (a *App) unfocusable(p interface {
 
 // focusables is the Tab-key cycle for the current tab.
 func (a *App) focusables() []tview.Primitive {
-	fs := []tview.Primitive{a.tree, a.methodDrop, a.urlInput, a.sendBtn}
+	fs := []tview.Primitive{a.sidebar(), a.methodDrop, a.urlInput, a.envDrop, a.sendBtn}
 	fs = append(fs, a.tabs[a.activeTab].focus()...)
 	if !a.tabs[a.activeTab].wide {
 		fs = append(fs, a.response)
@@ -290,6 +323,25 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 's' || ev.Rune() == 'S'):
 		a.saveAs()
 		return nil
+	case key == tcell.KeyF3:
+		if a.sideView == sideHistory {
+			a.showSidebar(sideCollections, true)
+		} else {
+			a.showSidebar(sideHistory, true)
+		}
+		return nil
+	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'h' || ev.Rune() == 'H'):
+		a.showSidebar(sideHistory, true)
+		return nil
+	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'c' || ev.Rune() == 'C'):
+		a.showSidebar(sideCollections, true)
+		return nil
+	case key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'e' || ev.Rune() == 'E'):
+		a.cycleEnv()
+		return nil
+	case key == tcell.KeyCtrlO:
+		a.importPostman()
+		return nil
 	case key == tcell.KeyCtrlN:
 		a.newRequest()
 		return nil
@@ -310,8 +362,8 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		if focus == a.urlInput {
 			return ev // closes autocomplete first; the done func handles the rest
 		}
-		if inCycle && focus != a.tree {
-			a.tv.SetFocus(a.tree)
+		if inCycle && focus != a.sidebar() {
+			a.tv.SetFocus(a.sidebar())
 			return nil
 		}
 		return ev

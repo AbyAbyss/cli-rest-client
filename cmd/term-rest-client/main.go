@@ -31,8 +31,15 @@ func run(args []string) int {
 		fmt.Fprintf(out, "Usage:\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE]                 start the interactive UI\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] list            list saved requests\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-set name=value]... <Collection/Request>...\n")
-		fmt.Fprintf(out, "                                                send saved requests and run their tests\n\nFlags:\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
+		fmt.Fprintf(out, "                                                send saved requests and run their tests\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] env [NAME|none] list environments, or switch the active one\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] import FILE...  import Postman collections, environments, globals or curl files\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] curl [-into Collection/Folder] [-name NAME] [CURL ARGS | -]\n")
+		fmt.Fprintf(out, "                                                save a curl command as a request (stdin when no args)\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] export [-o FILE] <Collection/Folder> | -env NAME | -globals\n")
+		fmt.Fprintf(out, "                                                export to Postman format\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -69,6 +76,16 @@ func run(args []string) int {
 			return cli.List(os.Stdout, ws)
 		case "run":
 			return cli.Run(os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "import":
+			return cli.Import(os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "curl":
+			return cli.Curl(os.Stdin, os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "export":
+			return cli.Export(os.Stdout, os.Stderr, ws, rest[1:])
+		case "env":
+			return cli.Env(os.Stdout, os.Stderr, ws, store, rest[1:])
+		case "history":
+			return cli.History(os.Stdout, os.Stderr, store, rest[1:])
 		case "help":
 			fs.Usage()
 			return 0

@@ -135,6 +135,11 @@ type Settings struct {
 	TimeoutSeconds     int    `json:"timeout_seconds"`
 	DisableRedirects   bool   `json:"disable_redirects,omitempty"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
+	// CollapsedSections remembers which response pane sections are folded
+	// ("tests", "request_headers", "response_headers", "body").
+	CollapsedSections map[string]bool `json:"collapsed_sections,omitempty"`
+	// DisableHistory stops recording sent requests.
+	DisableHistory bool `json:"disable_history,omitempty"`
 }
 
 // Draft is the unsaved builder state, restored on the next start.
@@ -154,10 +159,15 @@ type Workspace struct {
 	Version     int           `json:"version"`
 	Collections []*Collection `json:"collections"`
 	// Requests are saved requests that are not in any collection.
-	Requests  []*Request `json:"requests,omitempty"`
+	Requests []*Request `json:"requests,omitempty"`
+	// Variables are the global variables, available in every environment.
 	Variables []KeyValue `json:"variables,omitempty"`
-	Settings  Settings   `json:"settings"`
-	Draft     *Draft     `json:"draft,omitempty"`
+	// Environments are named variable sets (e.g. Local, Staging); the
+	// active one's values override globals with the same name.
+	Environments      []*Environment `json:"environments,omitempty"`
+	ActiveEnvironment string         `json:"active_environment,omitempty"`
+	Settings          Settings       `json:"settings"`
+	Draft             *Draft         `json:"draft,omitempty"`
 }
 
 // CurrentVersion is the workspace file format version.
@@ -170,6 +180,16 @@ func (w *Workspace) Normalize() {
 		w.Settings.TimeoutSeconds = 30
 	}
 	w.Collections = normalizeCollections(w.Collections)
+	envs := w.Environments[:0]
+	for _, e := range w.Environments {
+		if e != nil {
+			envs = append(envs, e)
+		}
+	}
+	w.Environments = envs
+	if w.Active() == nil {
+		w.ActiveEnvironment = ""
+	}
 	w.Requests = normalizeRequests(w.Requests)
 	if d := w.Draft; d != nil {
 		d.Request.Normalize()
@@ -214,36 +234,98 @@ func normalizeRequests(reqs []*Request) []*Request {
 	return out
 }
 
-// VariableMap returns the enabled variables as a map.
+// VariableMap returns the enabled globals overridden by the enabled
+// variables of the active environment.
 func (w *Workspace) VariableMap() map[string]string {
 	m := make(map[string]string, len(w.Variables))
-	for _, kv := range w.Variables {
-		if !kv.Disabled && kv.Key != "" {
-			m[kv.Key] = kv.Value
+	add := func(kvs []KeyValue) {
+		for _, kv := range kvs {
+			if !kv.Disabled && kv.Key != "" {
+				m[kv.Key] = kv.Value
+			}
 		}
+	}
+	add(w.Variables)
+	if env := w.Active(); env != nil {
+		add(env.Variables)
 	}
 	return m
 }
 
-// SetVariable sets (or adds) an enabled variable.
+// SetVariable sets a variable where it lives: in the active environment if
+// it is defined there, else in globals if defined there. New variables go
+// into the active environment, or into globals when none is active.
 func (w *Workspace) SetVariable(key, value string) {
-	for i := range w.Variables {
-		if w.Variables[i].Key == key {
-			w.Variables[i].Value = value
-			w.Variables[i].Disabled = false
-			return
-		}
+	env := w.Active()
+	switch {
+	case env != nil && hasKey(env.Variables, key):
+		env.Variables = setKV(env.Variables, key, value)
+	case hasKey(w.Variables, key) || env == nil:
+		w.Variables = setKV(w.Variables, key, value)
+	default:
+		env.Variables = setKV(env.Variables, key, value)
 	}
-	w.Variables = append(w.Variables, KeyValue{Key: key, Value: value})
 }
 
-// UnsetVariable removes a variable.
+// SetGlobal sets a global variable, ignoring environments.
+func (w *Workspace) SetGlobal(key, value string) {
+	w.Variables = setKV(w.Variables, key, value)
+}
+
+// UnsetVariable removes a variable from the active environment, or from
+// globals when the environment doesn't define it.
 func (w *Workspace) UnsetVariable(key string) {
-	out := w.Variables[:0]
+	if env := w.Active(); env != nil && hasKey(env.Variables, key) {
+		env.Variables = removeKV(env.Variables, key)
+		return
+	}
+	w.Variables = removeKV(w.Variables, key)
+}
+
+// VariableSource names where the value of key comes from: the active
+// environment's name, "Globals", or "" when it is not defined.
+func (w *Workspace) VariableSource(key string) string {
+	if env := w.Active(); env != nil {
+		for _, kv := range env.Variables {
+			if kv.Key == key && !kv.Disabled {
+				return env.Name
+			}
+		}
+	}
 	for _, kv := range w.Variables {
+		if kv.Key == key && !kv.Disabled {
+			return "Globals"
+		}
+	}
+	return ""
+}
+
+func hasKey(kvs []KeyValue, key string) bool {
+	for _, kv := range kvs {
+		if kv.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func setKV(kvs []KeyValue, key, value string) []KeyValue {
+	for i := range kvs {
+		if kvs[i].Key == key {
+			kvs[i].Value = value
+			kvs[i].Disabled = false
+			return kvs
+		}
+	}
+	return append(kvs, KeyValue{Key: key, Value: value})
+}
+
+func removeKV(kvs []KeyValue, key string) []KeyValue {
+	out := kvs[:0]
+	for _, kv := range kvs {
 		if kv.Key != key {
 			out = append(out, kv)
 		}
 	}
-	w.Variables = out
+	return out
 }

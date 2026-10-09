@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
@@ -193,6 +194,26 @@ func validHeaderName(name string) bool {
 		}
 	}
 	return true
+}
+
+// SentHeaders returns the headers that go on the wire: the request's own
+// headers plus the ones Go's HTTP transport adds by itself (Host,
+// Content-Length, and Accept-Encoding when compression is negotiated).
+func (p *Prepared) SentHeaders() http.Header {
+	h := p.Request.Header.Clone()
+	if h.Get("Host") == "" {
+		h.Set("Host", p.Request.URL.Host)
+	}
+	switch {
+	case len(p.Body) > 0:
+		h.Set("Content-Length", strconv.Itoa(len(p.Body)))
+	case p.Request.Method == http.MethodPost || p.Request.Method == http.MethodPut || p.Request.Method == http.MethodPatch:
+		h.Set("Content-Length", "0")
+	}
+	if h.Get("Accept-Encoding") == "" && h.Get("Range") == "" && p.Request.Method != http.MethodHead {
+		h.Set("Accept-Encoding", "gzip")
+	}
+	return h
 }
 
 // Curl renders the prepared request as a cURL command line.

@@ -58,7 +58,8 @@ func TestScreenshots(t *testing.T) {
 
 	newApp := func(theme string) (*harness, *models.Workspace) {
 		ws := storage.SampleWorkspace()
-		ws.SetVariable("baseUrl", base)
+		ws.Environment("Local").Variables[0].Value = base
+		ws.SetActive("Local")
 		ws.Settings.Theme = theme
 		h := start(t, ws)
 		h.screen.SetSize(shotW, shotH)
@@ -84,6 +85,22 @@ func TestScreenshots(t *testing.T) {
 	open(h, reqAt(t, ws, "User Service/Users/Create User"), 3)
 	send(h)
 	writeShot(t, h, dir, "main", "Term REST Client")
+
+	// 1b. Request and response headers open, body folded.
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = map[string]bool{secReqHeaders: false, secBody: true}
+		h.a.renderResponse()
+	})
+	writeShot(t, h, dir, "headers", "Request and response headers")
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = map[string]bool{secTests: true, secReqHeaders: true, secRespHeaders: true}
+		h.a.renderResponse()
+	})
+	writeShot(t, h, dir, "folded", "Sections folded")
+	h.do(func() {
+		h.a.ws.Settings.CollapsedSections = nil
+		h.a.renderResponse()
+	})
 
 	// 2. Query params and headers with variables.
 	open(h, reqAt(t, ws, "User Service/Lookup/Query Params"), 0)
@@ -132,6 +149,46 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "move", "Move a request")
 	h.key(tcell.KeyEsc, 0, 0)
 
+	// 6c. History in the sidebar.
+	h.do(func() { h.a.loadIntoBuilder(models.NewRequest(""), nil) })
+	h.key(tcell.KeyRune, 'h', tcell.ModAlt)
+	h.key(tcell.KeyDown, 0, 0)
+	h.key(tcell.KeyEnter, 0, 0) // open it: request + the response it got
+	h.do(func() { h.a.tv.SetFocus(h.a.historyView) })
+	h.key(tcell.KeyUp, 0, 0)
+	h.key(tcell.KeyDown, 0, 0)
+	writeShot(t, h, dir, "history", "Request history")
+	h.key(tcell.KeyRune, 'c', tcell.ModAlt)
+
+	// 6d. Environments in the Variables tab.
+	h.do(func() {
+		h.a.ws.Environments = append(h.a.ws.Environments, &models.Environment{Name: "Staging", Variables: []models.KeyValue{
+			{Key: "baseUrl", Value: "https://staging.api.example.com"},
+			{Key: "token", Value: "{{$uuid}}"},
+		}})
+		h.a.refreshEnvPicker()
+		h.a.editingEnv = "Local"
+		h.a.switchTab(6)
+		h.a.refreshVariablesTab()
+		h.a.tv.SetFocus(h.a.varsTarget)
+	})
+	writeShot(t, h, dir, "environments", "Environments")
+	h.do(func() { h.a.switchTab(0) })
+
+	// 6e. Import from Postman: the imported tree and the notes dialog.
+	imp, _ := filepath.Abs("../postman/testdata/shop.postman_collection.json")
+	h.do(func() {
+		for _, c := range h.a.ws.Collections[:3] {
+			h.a.collapsed[c] = true
+		}
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyCtrlO, 0, tcell.ModCtrl)
+	h.do(func() { h.a.tv.GetFocus().(*tview.TextArea).SetText(imp, true) })
+	h.key(tcell.KeyEnter, 0, 0)
+	writeShot(t, h, dir, "import", "Import from Postman")
+	h.key(tcell.KeyEsc, 0, 0)
+
 	// 7. Settings in another theme.
 	g, gws := newApp("Gruvbox Dark")
 	open(g, reqAt(t, gws, "User Service/Lookup/Get JSON"), 7)
@@ -146,7 +203,8 @@ func TestScreenshots(t *testing.T) {
 
 	// 9. Command-line mode.
 	cws := storage.SampleWorkspace()
-	cws.SetVariable("baseUrl", base)
+	cws.Environment("Local").Variables[0].Value = base
+	cws.SetActive("Local")
 	var out bytes.Buffer
 	cli.Run(&out, &out, cws, nil, []string{"User Service", "Payment Gateway"})
 	writeCLIShot(t, dir, "cli", `term-rest-client run "User Service" "Payment Gateway"`, out.String(), themes[0])

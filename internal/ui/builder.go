@@ -2,12 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/vars"
 )
@@ -103,9 +105,13 @@ func (a *App) buildRequestBar() {
 	a.urlInput.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
+			if text := a.urlInput.GetText(); curl.LooksLikeCurl(text) {
+				a.importCurl(text, true)
+				return
+			}
 			a.send()
 		case tcell.KeyEscape:
-			a.tv.SetFocus(a.tree)
+			a.tv.SetFocus(a.sidebar())
 		}
 	})
 	a.urlInput.SetAutocompleteFunc(a.variableCompletions)
@@ -131,11 +137,10 @@ func (a *App) variableCompletions(text string) []string {
 	prefix := text[open+2:]
 	var out []string
 	names := append([]string{}, vars.Dynamic...)
-	for _, kv := range a.ws.Variables {
-		if !kv.Disabled && kv.Key != "" {
-			names = append(names, kv.Key)
-		}
+	for k := range a.ws.VariableMap() {
+		names = append(names, k)
 	}
+	sort.Strings(names[len(vars.Dynamic):])
 	for _, n := range names {
 		if strings.HasPrefix(strings.ToLower(n), strings.ToLower(prefix)) {
 			out = append(out, text[:open]+"{{"+n+"}}")
@@ -411,32 +416,6 @@ func (a *App) buildTestsTab() *tab {
 	return &tab{name: "Tests", page: page, focus: func() []tview.Primitive { return []tview.Primitive{a.testsArea} }}
 }
 
-func (a *App) buildVariablesTab() *tab {
-	a.varsArea = a.newArea("Variables", "# example:\n# baseUrl=https://httpbin.org\n# token=secret")
-	a.varsArea.SetChangedFunc(func() {
-		if a.loading {
-			return
-		}
-		a.ws.Variables = models.ParseKV(a.varsArea.GetText(), "=")
-	})
-	a.varsArea.SetBlurFunc(func() { a.persist() })
-	page := a.newFlex(tview.FlexRow).
-		AddItem(a.varsArea, 0, 1, false).
-		AddItem(a.newHint(func(t *Theme) string {
-			return hintLine(t, "name=value per line, use as {{name}} anywhere",
-				"Built-in: {{$uuid}} {{$timestamp}} {{$isoTimestamp}} {{$randomInt}}",
-				"Shared by all requests, saved automatically")
-		}), 2, 0, false)
-	return &tab{name: "Variables", page: page, focus: func() []tview.Primitive { return []tview.Primitive{a.varsArea} }}
-}
-
-func (a *App) refreshVariablesArea() {
-	prev := a.loading
-	a.loading = true
-	a.varsArea.SetText(models.FormatKV(a.ws.Variables, "="), false)
-	a.loading = prev
-}
-
 func (a *App) buildSettingsTab() *tab {
 	s := &a.ws.Settings
 	_, themeIdx := themeByName(s.Theme)
@@ -476,17 +455,27 @@ func (a *App) buildSettingsTab() *tab {
 			a.setStatus(levelWarning, "TLS certificate verification is off")
 		}
 	})
-	a.themed = append(a.themed, a.redirectsBox, a.insecureBox)
+	historyBox := tview.NewCheckbox().SetLabel("Record history     ").SetChecked(!s.DisableHistory)
+	historyBox.SetChangedFunc(func(checked bool) {
+		s.DisableHistory = !checked
+		a.persist()
+	})
+	a.themed = append(a.themed, a.redirectsBox, a.insecureBox, historyBox)
 
 	a.settingsInfo = a.newHint(func(t *Theme) string {
 		path := "(not saved)"
 		if a.store != nil {
 			path = a.store.Path
 		}
-		return fmt.Sprintf("[%s]Version   [%s]%s\n[%s]Built     [%s]%s\n[%s]Data file [%s]%s",
+		hist := "(not saved)"
+		if a.store != nil {
+			hist = a.store.HistoryPath()
+		}
+		return fmt.Sprintf("[%s]Version   [%s]%s\n[%s]Built     [%s]%s\n[%s]Data file [%s]%s\n[%s]History   [%s]%s",
 			t.HexMuted, t.HexText, tview.Escape(a.info.Version),
 			t.HexMuted, t.HexText, tview.Escape(a.info.BuildTime),
-			t.HexMuted, t.HexText, tview.Escape(path))
+			t.HexMuted, t.HexText, tview.Escape(path),
+			t.HexMuted, t.HexText, tview.Escape(hist))
 	})
 
 	keys := tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true)
@@ -504,13 +493,15 @@ func (a *App) buildSettingsTab() *tab {
 		AddItem(nil, 1, 0, false).
 		AddItem(a.insecureBox, 1, 0, false).
 		AddItem(nil, 1, 0, false).
-		AddItem(a.settingsInfo, 3, 0, false).
+		AddItem(historyBox, 1, 0, false).
+		AddItem(nil, 1, 0, false).
+		AddItem(a.settingsInfo, 4, 0, false).
 		AddItem(nil, 1, 0, false).
 		AddItem(keys, 0, 1, false)
 	page.SetBorder(true).SetTitle(" Settings ").SetBorderPadding(1, 0, 1, 1)
 	a.bordered = append(a.bordered, page)
 	return &tab{name: "Settings", page: page, wide: true, focus: func() []tview.Primitive {
-		return []tview.Primitive{a.themeDrop, a.timeoutInput, a.redirectsBox, a.insecureBox, keys}
+		return []tview.Primitive{a.themeDrop, a.timeoutInput, a.redirectsBox, a.insecureBox, historyBox, keys}
 	}}
 }
 
@@ -584,4 +575,21 @@ func (a *App) renderTitles() {
 	}
 	a.urlInput.SetTitle(fmt.Sprintf(" [%s]%s[-]%s ", a.theme.HexAccent, tview.Escape(where), dirty))
 	a.bodyArea.SetTitle(fmt.Sprintf(" Body · %s ", bodyLabels[indexOf(models.BodyTypes, a.req.BodyType)]))
+}
+
+// urlField is the URL input with one extra trick: pasting a curl command
+// turns it into a request instead of inserting the text.
+type urlField struct {
+	*tview.InputField
+	onPaste func(text string) bool
+}
+
+func (u *urlField) PasteHandler() func(string, func(tview.Primitive)) {
+	inner := u.InputField.PasteHandler()
+	return func(text string, setFocus func(tview.Primitive)) {
+		if u.onPaste != nil && u.onPaste(text) {
+			return
+		}
+		inner(text, setFocus)
+	}
 }

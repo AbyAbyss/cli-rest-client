@@ -11,12 +11,16 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 - **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, with a URL bar that autocompletes `{{variables}}`.
 - **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML or form-urlencoded bodies. Any line can be disabled by starting it with `#`.
+- **Environments, like Postman**: named variable sets such as Local, Staging and Production. Pick one from the Environment selector next to the URL (or `Alt+E`); its values override Globals. Create, rename, duplicate and delete them in the Variables tab.
 - **Variables**: `{{name}}` works in the URL, params, headers, auth fields and body. Built-ins: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`.
 - **Pre-request scripts**: `set name = value` / `unset name` before a request is sent.
 - **Tests**: one assertion per line (`status == 200`, `json.items[0].id exists`, `time < 500` ...), plus `set token = json.token` to capture values for the next request.
 - **Collections and folders, like Postman**: group requests into collections, folders inside collections, and folders inside folders to any depth. Requests can also live at the top level. Create, rename, duplicate, reorder, move and delete anything. Everything is saved to a JSON file automatically.
 - **Unsaved changes are never lost**: edits you haven't saved are kept when you quit and restored on the next start. Opening another request asks before discarding.
-- **Response viewer**: status, timing, size, sorted headers, pretty-printed and colour-highlighted JSON, test results. Press `s` to save the body to a file.
+- **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
+- **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
+- **Import from cURL**: paste a curl command (from browser dev tools, API docs or Postman) into the URL field and it becomes a request, with headers, auth, body and params filled in.
+- **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
 - **Copy as cURL** (`Ctrl+G`), JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -34,8 +38,10 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **F1** shows every shortcut | **Settings** with the Gruvbox Dark theme |
 | ![Light theme](assets/screenshots/light.png) | ![Command-line mode](assets/screenshots/cli.png) |
 | **Light** theme | **`run` from the command line**, usable in CI |
-| ![Moving a request into another folder](assets/screenshots/move.png) | |
-| **Folders**: nest them as deep as you like, and press `m` to move a request or folder | |
+| ![Moving a request into another folder](assets/screenshots/move.png) | ![Request and response headers](assets/screenshots/headers.png) |
+| **Folders**: nest them as deep as you like, and press `m` to move a request or folder | **Request and response headers**, each foldable (here the body is folded) |
+| ![Request history](assets/screenshots/history.png) | |
+| **History**: every request you sent, grouped by day; the status bar shows the full URL | |
 
 ## Quick Start
 
@@ -177,7 +183,7 @@ The screen has four areas: the **Collections tree** on the left, the **request b
 | 4 Body | Body type (None, JSON, Text, XML, Form) and the body text. `Content-Type` is set from the type unless you set it in Headers. Form bodies are `key=value` per line. |
 | 5 Pre-request | Script run before sending (see below). |
 | 6 Tests | Assertions run on the response (see below). |
-| 7 Variables | Workspace variables, `name=value` per line. Shared by all requests. |
+| 7 Variables | Globals and environments, `name=value` per line. Create, rename, duplicate, delete and activate environments here |
 | 8 Settings | Theme, timeout, redirects, TLS verification, version, data file location and the keyboard reference. |
 
 Tabs that contain something show a marker, for example `Headers (2)` or `Tests •`. A `●` next to the request title means it has unsaved changes.
@@ -193,8 +199,10 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body |
 | `Ctrl+G`, `F4` | Show the request as a cURL command |
+| `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
+| `Alt+E` | Switch to the next environment (No Environment → each environment → back) |
 | `F1`, `?` | Help |
 | `Ctrl+Q`, `Ctrl+C` | Quit |
 
@@ -208,6 +216,8 @@ In the **Collections tree**:
 | `f` | New folder inside the selected collection or folder (or the folder of the selected request) |
 | `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
+| `i` | Import cURL or a Postman file (same as `Ctrl+O`) |
+| `x` | Export the selected collection or folder as a Postman collection |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
 | `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
@@ -241,11 +251,150 @@ The tree works like Postman's sidebar:
 
 In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
 
+### Importing from cURL
+
+Copy a request as cURL (Chrome or Firefox dev tools: right-click a request → **Copy as cURL**; or any `curl` example from API docs) and:
+
+- **paste it into the URL field**: it turns into a request straight away (method, URL, query params, headers, auth, body), unsaved, ready to send with `Ctrl+R` or save with `Ctrl+S`. Typing `curl ...` in the URL field and pressing `Enter` does the same;
+- or press `Ctrl+O` and paste one or more commands. Several commands become a new collection called "cURL import";
+- or from a terminal: `term-rest-client curl -into "Shop API/Orders" -X POST https://api.example.com/orders -d '{"qty":1}'`, `pbpaste | term-rest-client curl` (reads standard input), or `term-rest-client import calls.sh` for a file of curl commands.
+
+Understood:
+
+| curl | Becomes |
+|------|---------|
+| URL (`--url` or positional), `?query` | URL and Params |
+| `-X`, `-I` (HEAD), `-G` (data as query) | Method; POST when there is a body |
+| `-H 'Name: value'`, `-A`, `-e`, `-b 'a=1; b=2'` | Headers (User-Agent, Referer, Cookie) |
+| `-u user:pass`, `--oauth2-bearer`, `Authorization: Bearer/Basic` header | The Auth tab (Basic or Bearer) |
+| `-d`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json` | Body: JSON when the Content-Type (or the body) says so, form fields for `key=value&...`, XML or text otherwise |
+| `-F name=value` | Form fields (file fields are skipped) |
+| `$'...'`, `'...'`, `"..."`, `\` line breaks, `;`, `&&`, `\| jq` | Shell quoting and line continuations as bash reads them; pipes are ignored |
+| `-L`, `-s`, `-v`, `--compressed`, `-o`, `-m`, ... | Ignored (they don't change the request) |
+
+`-k`, bodies read from `@file`, and file uploads can't be carried over and are listed in a notes window.
+
+### Importing from Postman
+
+In Postman, export what you need (**Export** on a collection, choose **Collection v2.1**; environments and globals export from their own menus), then:
+
+- in the app press `Ctrl+O` (or `i` in the Collections tree) and enter the file path, or
+- from a terminal: `term-rest-client import ~/Downloads/Shop.postman_collection.json ~/Downloads/Staging.postman_environment.json`
+
+The file type is detected automatically.
+
+| Postman | Becomes |
+|---------|---------|
+| Collection, folders, nested folders | A collection with the same folders |
+| Request method, URL, headers (disabled ones stay disabled) | The same, with query parameters moved to the Params tab |
+| Path variables like `/users/:id` | The value Postman had, or `{{id}}` if it was empty |
+| Auth: Bearer, Basic, API key, No auth | The same. Auth set on the collection or a folder is copied to every request that inherits it |
+| Body: raw JSON / XML / text, x-www-form-urlencoded | The same body type |
+| Body: GraphQL | A JSON body with `query` and `variables` |
+| Body: form-data | Form fields, sent urlencoded. File fields are skipped |
+| Collection variables | Added to Globals (existing globals keep their value) |
+| Environment export | A new environment (not activated) |
+| Globals export | Added to Globals (existing ones keep their value) |
+| `{{$guid}}`, `{{$randomUUID}}` | `{{$uuid}}` |
+| Scripts | Common patterns are converted: `pm.response.to.have.status(200)` → `status == 200`, response time checks, header checks, `pm.environment.set("x", jsonData.a.b)` → `set x = json.a.b`, and literal `set`s in pre-request scripts. The original JavaScript is kept below as comments |
+
+Anything that doesn't carry over (OAuth 2 and other auth types, file uploads, collection-level scripts) is listed in a notes window after the import, so you know what to check. Importing the same collection twice creates "Shop API 2" rather than overwriting.
+
+![Import from Postman](assets/screenshots/import.png)
+
+### Exporting to Postman
+
+- **A collection or folder**: select it (or any request inside it) in the Collections tree and press `x`. The file is a Postman **Collection v2.1** you can import in Postman with **Import**. Top-level requests export together as a collection called "Requests".
+- **An environment or the globals**: in tab **7 Variables**, pick it in **Editing** and press **Export**.
+- From a terminal:
+
+```bash
+term-rest-client export -o Users.postman_collection.json "User Service/Users"
+term-rest-client export -env Local -o Local.postman_environment.json
+term-rest-client export -globals > globals.postman_globals.json
+```
+
+The app suggests a file name in the folder you last imported from or exported to, and asks before replacing an existing file.
+
+What goes into the file:
+
+- Folders, requests, method, URL, query params and headers (disabled ones stay disabled in Postman).
+- Auth on every request (Bearer, Basic, API key, or No Auth), so nothing depends on Postman's inheritance.
+- Bodies: JSON, XML and text as raw bodies with the right language; form bodies as x-www-form-urlencoded.
+- `{{$uuid}}` becomes Postman's `{{$randomUUID}}`.
+- **Scripts:** a request that came from Postman gets its original JavaScript back exactly. Scripts written here are translated line by line into Postman JavaScript, for example `status == 200` → `pm.test("status == 200", function () { pm.response.to.have.status(200); });` and `set token = json.token` → `pm.environment.set("token", pm.response.json().token);`. Comparisons follow this app's rules (`json.page == 1` also passes when the value is the string `"1"`). A line with no Postman equivalent is kept as a comment and listed in an export notes window.
+
+Exporting and importing again gives back the same requests; the test suite checks this round trip, and checks that the generated Postman tests pass or fail exactly like the originals.
+
+### History
+
+Every request you send is recorded, like Postman's History tab. Switch the sidebar with `Alt+H` (History) and `Alt+C` (Collections), `F3` to flip between them, or click the tabs above the sidebar.
+
+```
+ Collections   History (3)
+ ▾ Today
+   11:42 POST   201 /users
+   11:40 GET    200 /users?page=2
+   11:38 GET    ERR /health
+ ▾ Yesterday
+   17:05 DELETE 204 /users/7
+```
+
+| Keys | Action |
+|------|--------|
+| Arrows | Move through entries. The status bar shows the full URL, status, time and the saved request it came from |
+| `Enter` | Open it: the request goes into the builder as an unsaved copy and the response pane shows the response it got then, marked "From history" |
+| `s` | Save the entry to a collection or folder |
+| `/` | Filter by text in the URL, method, status or request name. `c` clears the filter |
+| `d` (or `Delete`) | Delete the entry |
+| `X` | Clear all history, after confirmation |
+
+Each entry keeps the request as you wrote it (with `{{variables}}`, so sending it again uses current values), the resolved URL and headers that were sent, the status, timing, response headers, test results, and up to 64 KB of the response body. Failed requests (connection refused, timeouts) are recorded too. The newest 200 entries are kept.
+
+History is stored next to the workspace file as `<name>.history.json` (for example `workspace.history.json`), so committing a workspace file doesn't pick up your request log. Turn recording off with **Record history** in Settings. `term-rest-client history` prints recent entries from the command line.
+
+### Response sections
+
+The response pane is split into sections that you can fold open (`▾`) or closed (`▸`):
+
+| Section | Key | Shows |
+|---------|-----|-------|
+| Tests | `t` | Each test line passed or failed, plus captured values |
+| Request Headers | `r` | Every header that was sent, including the ones added for you: `Authorization` from the Auth tab, `Content-Type` from the body type, `User-Agent`, `Host`, `Content-Length` and `Accept-Encoding` |
+| Response Headers | `h` | The headers the server returned, sorted by name |
+| Body | `b` | The body, pretty-printed and highlighted when it's JSON |
+
+Press the key while the response pane has focus, or click the section heading. Request Headers starts folded so the response stays readable; whatever you choose is remembered between runs. The status line (code, time, size) always stays visible.
+
+![Sections folded](assets/screenshots/folded.png)
+
 In dialogs: `Enter` confirms, `Tab` moves between fields, `Esc` cancels.
 
-### Variables
+### Environments and variables
 
-Define variables in tab 7 as `name=value`, then use `{{name}}` anywhere in a request. The sample workspace defines `baseUrl` and `token`. Variables that can't be resolved are left as-is and listed as a warning above the response.
+Variables work like Postman's:
+
+- **Globals** are available in every request.
+- **Environments** are named sets (Local, Staging, Production, ...). One can be active at a time, and its values override Globals with the same name. Pick it in the **Environment** selector next to the URL, or press `Alt+E` to step through them. "No Environment" uses Globals only.
+
+Use any variable as `{{name}}` in the URL, params, headers, auth fields or body.
+
+Manage them in tab **7 Variables**:
+
+| Control | What it does |
+|---------|--------------|
+| **Editing** dropdown | Choose what the text box edits: Globals or one of the environments (the active one is marked) |
+| Text box | `name=value` per line; `#` disables a line |
+| **New** | Create an environment |
+| **Rename** / **Duplicate** / **Delete** | Act on the environment being edited. Deleting the active one switches to No Environment |
+| **Use it** | Make the environment being edited the active one |
+| **Export** | Save the environment (or Globals) as a Postman file |
+
+The sample workspace has a global `token` and two environments: **httpbin.org** (`baseUrl=https://httpbin.org`) and **Local** (`baseUrl=http://localhost:8080` and its own `token`). Switching between them sends the same requests to a different server.
+
+The response pane shows which environment a request used, and History remembers it. If a `{{variable}}` can't be resolved it is left as-is and a warning says where the app looked (for example "not set in Local or Globals").
+
+![Environments](assets/screenshots/environments.png)
 
 ### Pre-request scripts
 
@@ -256,7 +405,7 @@ set auth = Bearer {{token}}
 unset oldValue
 ```
 
-`set` writes to the workspace variables, so the values show up in the Variables tab and stay available for later requests.
+`set` updates the variable where it already lives (the active environment first, then Globals). A new variable goes into the active environment, or into Globals when no environment is active. Changes show up in the Variables tab and stay available for later requests.
 
 ### Tests
 
@@ -287,10 +436,17 @@ term-rest-client run "User Service/Lookup/Get JSON"     # one request, by its fu
 term-rest-client run "User Service/Users"               # everything in a folder, sub-folders included
 term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
 term-rest-client run "Health Check"                     # a top-level request
+term-rest-client run -env Local "User Service"          # use a different environment for this run
+term-rest-client env                                    # list environments (* marks the active one)
+term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
+term-rest-client history -n 10                          # the last 10 requests sent from the app
+term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
+term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
+term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-v` also prints response headers and bodies. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace.
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it).
 
 ## Where data is stored
 

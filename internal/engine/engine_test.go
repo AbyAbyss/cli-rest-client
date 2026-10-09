@@ -3,6 +3,8 @@ package engine
 import (
 	"encoding/base64"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -142,6 +144,46 @@ func TestCurl(t *testing.T) {
 	for _, want := range []string{"curl -X POST 'http://h/x'", "-H 'Content-Type: application/json'", `--data-raw '{"it'\''s": 1}'`} {
 		if !strings.Contains(c, want) {
 			t.Errorf("curl missing %q:\n%s", want, c)
+		}
+	}
+}
+
+func TestSentHeadersMatchWire(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		got.Set("Host", r.Host)
+	}))
+	defer srv.Close()
+
+	for _, method := range []string{"GET", "POST", "DELETE"} {
+		r := models.NewRequest("t")
+		r.Method = method
+		r.URL = srv.URL + "/x"
+		r.Headers = []models.KeyValue{{Key: "X-Trace", Value: "1"}}
+		if method == "POST" {
+			r.BodyType = models.BodyJSON
+			r.Body = `{"a":1}`
+		}
+		p, err := Prepare(r, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(p.Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		want := p.SentHeaders()
+		for k := range got {
+			if want.Get(k) != got.Get(k) {
+				t.Errorf("%s %s: server saw %q, SentHeaders says %q", method, k, got.Get(k), want.Get(k))
+			}
+		}
+		for k := range want {
+			if got.Get(k) != want.Get(k) {
+				t.Errorf("%s %s: SentHeaders says %q, server saw %q", method, k, want.Get(k), got.Get(k))
+			}
 		}
 	}
 }
