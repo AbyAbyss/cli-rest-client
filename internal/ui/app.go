@@ -359,7 +359,7 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 		a.newRequest()
 		return nil
 	case key == tcell.KeyCtrlG || key == tcell.KeyF4:
-		a.showCurl()
+		a.showCode()
 		return nil
 	case key == tcell.KeyCtrlP:
 		a.formatBody()

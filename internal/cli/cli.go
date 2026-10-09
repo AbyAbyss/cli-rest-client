@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AbyAbyss/cli-rest-client/internal/codegen"
 	"github.com/AbyAbyss/cli-rest-client/internal/curl"
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
@@ -370,13 +371,17 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	file := fs.String("o", "", "write to this file instead of standard output")
 	envName := fs.String("env", "", "export this environment")
 	globals := fs.Bool("globals", false, "export the global variables")
-	asCurl := fs.Bool("curl", false, "print saved requests as curl commands instead")
-	raw := fs.Bool("raw", false, "with -curl: keep {{variables}} instead of filling in values")
+	asCurl := fs.Bool("curl", false, "print saved requests as curl commands (same as -lang curl)")
+	lang := fs.String("lang", "", "print saved requests as code: "+codegen.IDs())
+	raw := fs.Bool("raw", false, "with -curl or -lang: keep {{variables}} instead of filling in values")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *asCurl {
-		return exportCurl(out, errOut, ws, fs.Args(), *raw)
+	if *asCurl && *lang == "" {
+		*lang = "curl"
+	}
+	if *lang != "" {
+		return exportCode(out, errOut, ws, *lang, fs.Args(), *raw)
 	}
 
 	var data []byte
@@ -430,9 +435,14 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	return 0
 }
 
-// exportCurl prints the named requests (or every request under a named
-// collection or folder) as curl commands.
-func exportCurl(out, errOut io.Writer, ws *models.Workspace, names []string, raw bool) int {
+// exportCode prints the named requests (or every request under a named
+// collection or folder) as code in the given language.
+func exportCode(out, errOut io.Writer, ws *models.Workspace, lang string, names []string, raw bool) int {
+	l, ok := codegen.Lookup(lang)
+	if !ok {
+		fmt.Fprintf(errOut, "export: unknown language %q (use %s)\n", lang, codegen.IDs())
+		return 2
+	}
 	if len(names) == 0 {
 		fmt.Fprintln(errOut, `export: name at least one request or folder ("Collection/Request")`)
 		return 2
@@ -446,26 +456,28 @@ func exportCurl(out, errOut io.Writer, ws *models.Workspace, names []string, raw
 		}
 		reqs = append(reqs, found...)
 	}
+	comment := "# "
+	if l.ID == "javascript" || l.ID == "go" {
+		comment = "// "
+	}
 	for i, r := range reqs {
-		var cmd *curl.Command
-		if raw {
-			cmd = curl.Template(*r)
-		} else {
-			var err error
-			if cmd, err = curl.Resolved(*r, ws.VariableMap()); err != nil {
-				fmt.Fprintf(errOut, "export: %s: %v\n", r.Name, err)
-				return 1
-			}
+		snip, err := codegen.Generate(l.ID, *r, ws.VariableMap(), raw)
+		if err != nil {
+			fmt.Fprintf(errOut, "export: %s: %v\n", r.Name, err)
+			return 1
 		}
 		if len(reqs) > 1 {
 			if i > 0 {
 				fmt.Fprintln(out)
 			}
-			fmt.Fprintf(out, "# %s\n", r.Name)
+			fmt.Fprintf(out, "%s%s\n", comment, r.Name)
 		}
-		fmt.Fprintln(out, cmd.Text)
-		if len(cmd.Missing) > 0 {
-			fmt.Fprintf(errOut, "warning: %s: undefined variable(s): %s\n", r.Name, strings.Join(cmd.Missing, ", "))
+		fmt.Fprint(out, snip.Text)
+		if !strings.HasSuffix(snip.Text, "\n") {
+			fmt.Fprintln(out)
+		}
+		if len(snip.Missing) > 0 {
+			fmt.Fprintf(errOut, "warning: %s: undefined variable(s): %s\n", r.Name, strings.Join(snip.Missing, ", "))
 		}
 	}
 	return 0

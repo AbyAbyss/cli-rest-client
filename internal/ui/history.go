@@ -390,7 +390,7 @@ func (a *App) historyKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.clearHistory()
 		case 'y':
 			if e := a.selectedHistory(); e != nil {
-				a.copyCurl(e.Request)
+				a.copyCode(e.Request)
 			}
 		case 's':
 			if e := a.selectedHistory(); e != nil {

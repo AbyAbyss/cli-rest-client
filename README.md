@@ -21,7 +21,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
 - **Import from cURL**: paste a curl command (from browser dev tools, API docs or Postman) into the URL field and it becomes a request, with headers, auth, body and params filled in.
 - **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
-- **Copy as cURL**: `Ctrl+G` shows the current request as a curl command and `c` copies it to the clipboard; `y` copies a request straight from the Collections tree or History. Variables can be filled in or kept as `{{name}}`.
+- **Code snippets, like Postman's `</>` panel**: `Ctrl+G` shows the current request as curl, Python (`requests`), JavaScript (`fetch`), Go (`net/http`) or HTTPie, and `c` copies it to the clipboard. `y` copies a request straight from the Collections tree or History. Variables can be filled in or kept as variables in the code.
 - JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
@@ -41,8 +41,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **Light** theme | **`run` from the command line**, usable in CI |
 | ![Moving a request into another folder](assets/screenshots/move.png) | ![Request and response headers](assets/screenshots/headers.png) |
 | **Folders**: nest them as deep as you like, and press `m` to move a request or folder | **Request and response headers**, each foldable (here the body is folded) |
-| ![Request history](assets/screenshots/history.png) | |
-| **History**: every request you sent, grouped by day; the status bar shows the full URL | |
+| ![Request history](assets/screenshots/history.png) | ![Code snippets](assets/screenshots/code.png) |
+| **History**: every request you sent, grouped by day; the status bar shows the full URL | **`Ctrl+G`**: the request as cURL, Python, JavaScript, Go or HTTPie, ready to copy |
 
 ## Quick Start
 
@@ -199,7 +199,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Alt+S` | Save as a new request |
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body |
-| `Ctrl+G`, `F4` | Show the request as a cURL command. In that window `c` copies it and `v` switches between real values and `{{variables}}` |
+| `Ctrl+G`, `F4` | Show the request as code. In that window `←`/`→` switch language, `c` copies, `v` switches between real values and `{{variables}}` |
 | `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
 | `Alt+1` ... `Alt+8` | Switch tab. Plain `1`-`8` also works when you're not typing in a text field |
@@ -219,7 +219,7 @@ In the **Collections tree**:
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
 | `i` | Import cURL or a Postman file (same as `Ctrl+O`) |
 | `x` | Export the selected collection or folder as a Postman collection |
-| `y` | Copy the selected request to the clipboard as a curl command |
+| `y` | Copy the selected request to the clipboard as code (curl until you pick another language in `Ctrl+G`) |
 | `e` (or `F2`) | Rename |
 | `c` | Duplicate. Folders are copied with everything inside |
 | `d` (or `Delete`) | Delete, after confirmation. Deleting a collection or folder deletes everything inside it |
@@ -276,19 +276,53 @@ Understood:
 
 `-k`, bodies read from `@file`, and file uploads can't be carried over and are listed in a notes window.
 
-### Copying as cURL
+### Code snippets and copying as cURL
 
-`Ctrl+G` (or `F4`) opens the current request as a curl command, ready to paste into a terminal, a bug report or a chat. In that window:
+`Ctrl+G` (or `F4`) opens the current request as code, ready to paste into a terminal, a script, a bug report or a chat. In that window:
 
-- `c` copies it to the clipboard and closes the window;
+- `←` / `→` (or `1`-`5`) switch between **cURL**, **Python** (`requests`), **JavaScript** (`fetch`), **Go** (`net/http`) and **HTTPie**. The app remembers the language you picked;
+- `c` copies the code to the clipboard and closes the window;
 - `v` switches between **real values** (variables filled in from the active environment, auth and params applied, the pre-request script run on a scratch copy so nothing is saved) and **`{{variables}} kept`**, which is handy for docs or for sharing with someone who has their own environment;
 - `Esc` closes it.
 
-`y` on a request in the Collections tree, or on an entry in History, copies it with real values without opening anything. If a variable isn't defined the status bar says which one, and it stays as `{{name}}` in the command.
+The Charge sample request as Python, with real values:
+
+```python
+import requests
+
+url = "https://httpbin.org/post"
+headers = {
+    "Content-Type": "application/json",
+}
+payload = {
+    "amount": 200,
+    "currency": "INR",
+    "orderId": "order-831",
+}
+
+response = requests.post(url, headers=headers, json=payload)
+print(response.status_code)
+print(response.text)
+```
+
+How each language handles the details:
+
+| | Python | JavaScript | Go | HTTPie |
+|---|---|---|---|---|
+| JSON body | a dict, sent with `json=` | an object in `JSON.stringify(...)` | the body text as you wrote it | `key=value` and `key:=json` items (`--raw` for arrays) |
+| Form body | a dict (list of pairs if a key repeats) in `data=` | `URLSearchParams` | `url.Values` | `--form` items |
+| Params tab | `params=` | `url.searchParams` | appended to the URL, `url.QueryEscape` for variables | `name==value` items |
+| Basic auth | `auth=(user, pass)` | `btoa` in an `Authorization` header | `req.SetBasicAuth` | `-a user:pass` |
+
+With `{{variables}} kept`, each variable becomes a named variable at the top of the snippet, set to its current value (`base_url = "https://httpbin.org"` in Python, `const baseUrl` in JavaScript, `baseUrl :=` in Go, `BASE_URL=` for HTTPie), so the code still runs. A variable used as a whole JSON value, like `"createdAt": {{$timestamp}}`, keeps its type. JavaScript snippets use top-level `await`: run them in a browser console, as an ES module (`node file.mjs`), or wrap them in an async function. `fetch` can't send a body with GET or HEAD, so that snippet leaves it out with a comment. Pre-request and test scripts stay in the app, as in Postman.
+
+Every snippet is checked in the test suite by running it (Python, Node, Go and HTTPie) against a local server and comparing what arrives with what the app itself sends.
+
+`y` on a request in the Collections tree, or on an entry in History, copies it with real values without opening anything, in the language you last picked (curl at first). If a variable isn't defined the status bar says which one, and it stays as `{{name}}`.
 
 The clipboard is reached through `pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux (whichever is installed), and `clip` on Windows or WSL. Over SSH, or when none of those exist, the app sends the text to your terminal with the OSC 52 escape sequence, which iTerm2, kitty, WezTerm, Alacritty, Windows Terminal and tmux (with `set -g set-clipboard on`) understand. macOS Terminal.app doesn't support OSC 52, so over SSH from Terminal.app open the window with `Ctrl+G` and select the text instead.
 
-From a terminal: `term-rest-client export -curl "Payment Gateway/Charges/Charge"` prints the command, `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
+From a terminal: `term-rest-client export -lang python "Payment Gateway/Charges/Charge"` prints the code (`-lang` takes `curl`, `python`, `javascript`, `go` or `httpie`; `-curl` is short for `-lang curl`). `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
 
 ### Importing from Postman
 
@@ -361,7 +395,7 @@ Every request you send is recorded, like Postman's History tab. Switch the sideb
 | Arrows | Move through entries. The status bar shows the full URL, status, time and the saved request it came from |
 | `Enter` | Open it: the request goes into the builder as an unsaved copy and the response pane shows the response it got then, marked "From history" |
 | `s` | Save the entry to a collection or folder |
-| `y` | Copy the entry's request as a curl command |
+| `y` | Copy the entry's request as code (same language as `Ctrl+G`) |
 | `/` | Filter by text in the URL, method, status or request name. `c` clears the filter |
 | `d` (or `Delete`) | Delete the entry |
 | `X` | Clear all history, after confirmation |
@@ -461,6 +495,7 @@ term-rest-client import Shop.postman_collection.json    # import Postman collect
 term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
 term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
 term-rest-client export -curl "Auth API/Bearer Token"    # print a request as a curl command (-raw keeps {{variables}})
+term-rest-client export -lang go "Auth API/Login"        # or as python, javascript, go or httpie code
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
@@ -486,6 +521,7 @@ cli-rest-client/
 ├── internal/
 │   ├── cli/                # headless "list" and "run" commands
 │   ├── clipboard/          # copy text via pbcopy, wl-copy, xclip, xsel, clip or OSC 52
+│   ├── codegen/            # request → curl, Python, JavaScript, Go and HTTPie code
 │   ├── engine/             # builds http.Request from a saved request + variables, cURL export
 │   ├── models/             # workspace, collection and request types
 │   ├── script/             # pre-request and test script interpreter

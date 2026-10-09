@@ -290,6 +290,20 @@ func TestExportCurl(t *testing.T) {
 		t.Fatalf("raw folder: %s", got)
 	}
 
+	out.Reset()
+	if Export(&out, &errOut, ws, []string{"-lang", "py", "-raw", "Payment Gateway/Charges/Charge"}) != 0 {
+		t.Fatalf("python: %s", errOut.String())
+	}
+	if got := out.String(); !strings.HasPrefix(got, "import requests") || !strings.Contains(got, `url = f"{base_url}/post"`) {
+		t.Fatalf("python raw: %s", got)
+	}
+	out.Reset()
+	if Export(&out, &errOut, ws, []string{"-lang", "go", "Auth API"}) != 0 || !strings.Contains(out.String(), "// Login\npackage main") {
+		t.Fatalf("go folder: %s", out.String())
+	}
+	if Export(&out, &errOut, ws, []string{"-lang", "cobol", "Auth API"}) != 2 || !strings.Contains(errOut.String(), "httpie") {
+		t.Fatalf("unknown language: %s", errOut.String())
+	}
 	if Export(&out, &errOut, ws, []string{"-curl"}) != 2 || Export(&out, &errOut, ws, []string{"-curl", "Nope"}) != 2 {
 		t.Fatal("bad arguments should exit 2")
 	}
