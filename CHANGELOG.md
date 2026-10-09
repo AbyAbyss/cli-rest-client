@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Streaming responses: Server-Sent Events and NDJSON are shown live, each event with
+  its arrival time, type and id. The timeout stops at the headers, `Esc` stops the
+  stream and keeps what arrived, and History keeps it. Test subjects `events` and
+  `event[i]` / `event[i].json.path`. `run` follows streams until `-stream` runs out.
+- GraphQL: a GraphQL body type with Query and Variables editors, sent as JSON (or in
+  the URL for GET). `F6` browses the schema by introspection and writes a query with
+  variables for a field. Code snippets, curl import/export and Postman's graphql body
+  mode all handle it.
+- WebSocket requests (WS in the method dropdown): connect with params, headers and
+  auth in the handshake, send the Body tab as messages, and watch a live sent/received
+  log; tests run on the received messages when the connection ends. `run` connects,
+  sends and collects replies for CI. Snippets in JavaScript, Python, Go and websocat.
+- Sample "API Types" collection: GraphQL (countries API), SSE (Wikimedia live edits)
+  and WebSocket (Postman echo).
+
+## [0.2.0] - 2026-10-09
+
+### Added
 - Prebuilt binaries: `make release` / `scripts/release.sh` build macOS, Linux and
   Windows archives with SHA256SUMS; a Release workflow publishes them on a `v*` tag;
   `get.sh` installs the right one with a single `curl ... | sh`, no Go needed.
@@ -104,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.1.0
 
 

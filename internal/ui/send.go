@@ -289,6 +289,9 @@ func (a *App) streamUpdater(res *sendResult) func(*httpclient.Response) {
 					return // finished or superseded in the meantime
 				}
 				res.resp = snap
+				if snap.Stream != "" {
+					a.setStatus(levelInfo, fmt.Sprintf("Streaming: %s so far. Esc stops", plural(len(snap.Events), "event")))
+				}
 				a.renderResponse()
 				if a.tv.GetFocus() != a.response {
 					a.response.ScrollToEnd() // follow the stream unless the user is reading

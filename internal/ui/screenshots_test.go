@@ -60,6 +60,9 @@ func TestScreenshots(t *testing.T) {
 		ws := storage.SampleWorkspace()
 		ws.Environment("Local").Variables[0].Value = base
 		ws.SetActive("Local")
+		ws.SetVariable("graphqlUrl", base+"/graphql")
+		ws.SetVariable("sseUrl", base+"/sse?interval=350&count=0")
+		ws.SetVariable("wsUrl", "ws"+strings.TrimPrefix(base, "http")+"/ws")
 		ws.Settings.Theme = theme
 		h := start(t, ws)
 		h.screen.SetSize(shotW, shotH)
@@ -126,6 +129,47 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "code", "Code snippets")
 	h.key(tcell.KeyRune, '1', 0)
 	h.key(tcell.KeyEsc, 0, 0)
+
+	// 4c. A live Server-Sent Events stream.
+	open(h, reqAt(t, ws, "API Types/Live events (SSE)"), 5)
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("events", func() bool {
+		r := h.a.result
+		return r != nil && r.resp != nil && len(r.resp.Events) >= 6
+	})
+	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
+	writeShot(t, h, dir, "streaming", "Server-Sent Events")
+	h.key(tcell.KeyEsc, 0, 0)
+	h.eventually("stopped", func() bool { return !h.a.sending })
+
+	// 4d. GraphQL schema browser, then the query it writes, sent.
+	open(h, reqAt(t, ws, "API Types/Country (GraphQL)"), 3)
+	h.key(tcell.KeyF6, 0, 0)
+	h.eventually("schema", func() bool { return len(h.a.dialogs) == 1 })
+	h.key(tcell.KeyDown, 0, 0)
+	h.key(tcell.KeyRight, 0, 0)
+	writeShot(t, h, dir, "graphql-schema", "GraphQL schema")
+	h.key(tcell.KeyEnter, 0, 0)
+	h.do(func() {
+		h.a.gqlVarsArea.SetText("{\n  \"code\": \"{{country}}\"\n}", false)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	send(h)
+	writeShot(t, h, dir, "graphql", "GraphQL")
+
+	// 4e. A WebSocket session.
+	open(h, reqAt(t, ws, "API Types/Echo (WebSocket)"), 3)
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("connected", func() bool { s := h.a.wsSession(); return s.open() && len(s.messages) == 1 })
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("echo", func() bool { return len(h.a.wsSession().messages) == 3 })
+	h.do(func() { h.a.bodyArea.SetText("{\n  \"type\": \"subscribe\",\n  \"channel\": \"orders\"\n}", false) })
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("second echo", func() bool { return len(h.a.wsSession().messages) == 5 })
+	h.do(func() { h.a.tv.SetFocus(h.a.tree) })
+	writeShot(t, h, dir, "websocket", "WebSocket")
+	h.do(func() { h.a.wsDisconnect() })
+	h.eventually("closed", func() bool { return !h.a.wsSession().open() })
 
 	// 5. Help overlay.
 	h.key(tcell.KeyF1, 0, 0)

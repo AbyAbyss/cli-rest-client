@@ -9,6 +9,7 @@ internal/storage       JSON workspace file: Load, atomic Save, DefaultPath, Samp
 internal/vars          {{name}} substitution and dynamic variables ($uuid, $timestamp, ...)
 internal/engine        Prepare(Request, vars) -> *http.Request (+ missing vars, warnings); Curl()
 internal/script        RunPre (set/unset) and RunTests (assertions and captures)
+internal/graphql       introspection query, schema parsing and query skeletons (schema browser)
 internal/curl          curl command line parser (shell quoting, curl options -> Request) and export (Resolved, Template)
 internal/codegen       request -> curl / Python / JavaScript / Go / HTTPie (one Spec, a generator per language)
 internal/clipboard     Copy(text): pbcopy / wl-copy / xclip / xsel / clip, OSC 52 fallback
@@ -16,7 +17,8 @@ internal/postman       Postman import and export (collections, environments, glo
 internal/cli           headless commands (list, run, env, import, export, curl, history)
 internal/ui            tview application
 internal/testutil      httpbin-compatible test server
-pkg/httpclient         http.Client wrapper: timeout, redirects, TLS, cancellation, timing
+pkg/httpclient         http.Client wrapper: timeout, redirects, TLS, cancellation, timing, live streams
+pkg/wsclient           WebSocket connections (coder/websocket): handshake from a prepared request, messages in and out
 ```
 
 Dependencies point one way: `ui` and `cli` use `engine`, `script`, `storage` and `pkg/httpclient`; those use `models` and `vars`. Nothing below `ui` imports tview, so everything except the screen code can be tested without a terminal.
@@ -61,6 +63,12 @@ Collections form a tree: `Collection.Folders` holds nested collections (shown as
 ## Environments
 
 `Workspace.Variables` are the globals; `Workspace.Environments` are named sets and `ActiveEnvironment` names the active one. `VariableMap()` merges globals with the active environment on top, and everything that resolves variables (engine, scripts, CLI) goes through it. `SetVariable` updates a variable where it already lives (active environment first, then globals) and puts new ones in the active environment, so script captures land where you'd expect. `ui/env.go` holds the picker and the Variables tab's environment manager.
+
+## Streams and WebSockets
+
+`httpclient.DoStream` reads the body in chunks. When the Content-Type is a stream (`text/event-stream`, NDJSON types), it stops the timeout once the headers arrive, parses events incrementally (`streamParser` follows the SSE rules of the HTML standard, including CR/LF/CRLF split across chunks), and calls an update function with a snapshot after each chunk. Snapshots cap the body and event slices at their current length, so they can cross goroutines without copying: the client only ever appends. `ui.streamUpdater` coalesces updates to one redraw per 80 ms. Cancelling after the headers ends the stream with `Stopped` set and the data kept, so tests and History see a normal response.
+
+A WebSocket request is `Type: websocket`. `engine.Prepare` builds its handshake (a GET with params, headers and auth) and resolves the message. `ui/websocket.go` keeps a `wsSession` in the `sendResult`: a read goroutine queues each message onto the UI goroutine, and when the connection ends the tests run with the received messages as `script.Response.Events`. The CLI does the same in `runWebSocket`, ending after a quiet second.
 
 ## Code generation
 
