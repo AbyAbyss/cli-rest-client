@@ -140,6 +140,9 @@ type Settings struct {
 	CollapsedSections map[string]bool `json:"collapsed_sections,omitempty"`
 	// DisableHistory stops recording sent requests.
 	DisableHistory bool `json:"disable_history,omitempty"`
+	// CodeLanguage is the language last picked in the code window (Ctrl+G),
+	// which y also copies in.
+	CodeLanguage string `json:"code_language,omitempty"`
 }
 
 // Draft is the unsaved builder state, restored on the next start.

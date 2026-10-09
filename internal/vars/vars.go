@@ -13,6 +13,9 @@ import (
 
 var pattern = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.$-]+)\s*\}\}`)
 
+// Pattern matches a {{name}} reference; submatch 1 is the name.
+var Pattern = pattern
+
 // Now is the clock used by dynamic variables; tests replace it.
 var Now = time.Now
 

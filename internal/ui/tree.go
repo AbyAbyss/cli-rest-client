@@ -226,9 +226,9 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.exportSelected()
 		case 'y':
 			if _, r := a.selection(); r != nil {
-				a.copyCurl(*r)
+				a.copyCode(*r)
 			} else {
-				a.setStatus(levelWarning, "Select a request to copy it as curl")
+				a.setStatus(levelWarning, "Select a request to copy it as code")
 			}
 		case 'K':
 			a.moveSelected(-1)

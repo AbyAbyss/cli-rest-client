@@ -15,7 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/AbyAbyss/cli-rest-client/internal/curl"
+	"github.com/AbyAbyss/cli-rest-client/internal/codegen"
 	"github.com/AbyAbyss/cli-rest-client/internal/engine"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
@@ -425,14 +425,21 @@ func (a *App) renderResponse() {
 	a.response.SetText(sb.String())
 }
 
-// curlFor renders r as a curl command: with real values (as Send would
-// send it, pre-request script applied) or as a template keeping
-// {{variables}}.
-func (a *App) curlFor(r models.Request, template bool) (*curl.Command, error) {
-	if template {
-		return curl.Template(r), nil
+// codeLanguage is the language the code window and y use: the last one
+// picked in the code window, curl at first.
+func (a *App) codeLanguage() codegen.Language {
+	if l, ok := codegen.Lookup(a.ws.Settings.CodeLanguage); ok {
+		return l
 	}
-	return curl.Resolved(r, a.ws.VariableMap())
+	return codegen.Languages[0]
+}
+
+// codeLabel names a language in status messages ("as curl", "as Python").
+func codeLabel(l codegen.Language) string {
+	if l.ID == "curl" {
+		return "curl"
+	}
+	return l.Name
 }
 
 // copyText puts text on the clipboard and reports how it went.
@@ -445,58 +452,75 @@ func (a *App) copyText(text, what string) {
 	a.setStatus(levelSuccess, fmt.Sprintf("Copied %s to the clipboard (via %s)", what, how))
 }
 
-// copyCurl copies r as a ready-to-run curl command.
-func (a *App) copyCurl(r models.Request) {
-	cmd, err := a.curlFor(r, false)
+// copyCode copies r, with real values, in the last language picked in the
+// code window.
+func (a *App) copyCode(r models.Request) {
+	l := a.codeLanguage()
+	snip, err := codegen.Generate(l.ID, r, a.ws.VariableMap(), false)
 	if err != nil {
-		a.setStatus(levelError, "Cannot build cURL: "+err.Error())
+		a.setStatus(levelError, "Cannot build "+l.Name+": "+err.Error())
 		return
 	}
 	name := r.Name
 	if name == "" {
 		name = r.Method + " request"
 	}
-	a.copyText(cmd.Text, fmt.Sprintf("%q as curl", name))
-	if len(cmd.Missing) > 0 {
-		a.setStatus(levelWarning, fmt.Sprintf("Copied, but {{%s}} has no value", strings.Join(cmd.Missing, "}}, {{")))
+	a.copyText(snip.Text, fmt.Sprintf("%q as %s", name, codeLabel(l)))
+	if len(snip.Missing) > 0 {
+		a.setStatus(levelWarning, fmt.Sprintf("Copied, but {{%s}} has no value", strings.Join(snip.Missing, "}}, {{")))
 	}
 }
 
-// showCurl shows the request being edited as a curl command. c copies it,
-// v switches between real values and {{variables}}.
-func (a *App) showCurl() {
+// showCode shows the request being edited as code: curl, Python,
+// JavaScript, Go or HTTPie. Left/Right switch language, c copies, v
+// switches between real values and {{variables}}.
+func (a *App) showCode() {
 	req := a.req.Clone()
 	template := false
+	lang := 0
+	for i, l := range codegen.Languages {
+		if l.ID == a.codeLanguage().ID {
+			lang = i
+		}
+	}
 	t := a.theme
 	tv := tview.NewTextView().SetDynamicColors(true).SetScrollable(true).SetWrap(true)
 	tv.SetBackgroundColor(t.Input)
 	tv.SetTextColor(t.Text)
-	tv.SetBorder(true).SetBorderColor(t.Focus).SetTitleColor(t.Title).SetBorderPadding(1, 1, 2, 2)
+	tv.SetBorder(true).SetBorderColor(t.Focus).SetTitleColor(t.Title).SetBorderPadding(0, 0, 2, 2)
 
 	var current string
 	render := func() bool {
-		cmd, err := a.curlFor(req, template)
+		l := codegen.Languages[lang]
+		snip, err := codegen.Generate(l.ID, req, a.ws.VariableMap(), template)
 		if err != nil {
-			a.setStatus(levelError, "Cannot build cURL: "+err.Error())
+			a.setStatus(levelError, "Cannot build "+l.Name+": "+err.Error())
 			return false
 		}
-		current = cmd.Text
-		mode := "real values"
-		other := "{{variables}}"
+		current = snip.Text
+		mode, other := "real values", "{{variables}}"
 		if template {
 			mode, other = "{{variables}} kept", "real values"
 		}
-		tv.SetTitle(" cURL · " + tview.Escape(mode) + " ")
+		tv.SetTitle(" " + l.Name + " · " + tview.Escape(mode) + " ")
+
 		var sb strings.Builder
-		sb.WriteString(tview.Escape(cmd.Text))
-		if len(cmd.Missing) > 0 {
-			fmt.Fprintf(&sb, "\n\n[%s]No value for {{%s}}", t.HexWarning, tview.Escape(strings.Join(cmd.Missing, "}}, {{")))
+		for i, x := range codegen.Languages {
+			if i == lang {
+				fmt.Fprintf(&sb, "[%s::bu]%s[-:-:-]   ", t.HexAccent, x.Name)
+			} else {
+				fmt.Fprintf(&sb, "[%s]%s[-]   ", t.HexMuted, x.Name)
+			}
 		}
-		if !template && strings.TrimSpace(req.PreRequest) != "" {
+		fmt.Fprintf(&sb, "\n\n[%s]%s", t.HexText, tview.Escape(strings.TrimRight(snip.Text, "\n")))
+		if len(snip.Missing) > 0 {
+			fmt.Fprintf(&sb, "\n\n[%s]No value for {{%s}}", t.HexWarning, tview.Escape(strings.Join(snip.Missing, "}}, {{")))
+		}
+		if strings.TrimSpace(req.PreRequest) != "" && (!template || l.ID != "curl") {
 			fmt.Fprintf(&sb, "\n\n[%s]The pre-request script was applied (nothing was saved).", t.HexMuted)
 		}
-		fmt.Fprintf(&sb, "\n\n[%s::b]c[-:-:-] [%s]copy   [%s::b]v[-:-:-] [%s]show %s   [%s::b]Esc[-:-:-] [%s]close",
-			t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, tview.Escape(other), t.HexAccent, t.HexMuted)
+		fmt.Fprintf(&sb, "\n\n[%s::b]←/→[-:-:-] [%s]language   [%s::b]c[-:-:-] [%s]copy   [%s::b]v[-:-:-] [%s]show %s   [%s::b]Esc[-:-:-] [%s]close",
+			t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, tview.Escape(other), t.HexAccent, t.HexMuted)
 		tv.SetText(sb.String())
 		tv.ScrollToBeginning()
 		return true
@@ -504,15 +528,32 @@ func (a *App) showCurl() {
 	if !render() {
 		return
 	}
+	switchTo := func(i int) {
+		n := len(codegen.Languages)
+		lang = (i%n + n) % n
+		a.ws.Settings.CodeLanguage = codegen.Languages[lang].ID
+		a.persist()
+		render()
+	}
 	tv.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case ev.Key() == tcell.KeyEsc || ev.Key() == tcell.KeyEnter || (ev.Key() == tcell.KeyRune && ev.Rune() == 'q'):
 			a.closeDialog()
+		case ev.Key() == tcell.KeyRight || (ev.Key() == tcell.KeyRune && ev.Rune() == 'l'):
+			switchTo(lang + 1)
+		case ev.Key() == tcell.KeyLeft || (ev.Key() == tcell.KeyRune && ev.Rune() == 'h'):
+			switchTo(lang - 1)
+		case ev.Key() == tcell.KeyRune && ev.Rune() >= '1' && int(ev.Rune()-'1') < len(codegen.Languages):
+			switchTo(int(ev.Rune() - '1'))
 		case ev.Key() == tcell.KeyRune && (ev.Rune() == 'c' || ev.Rune() == 'y'):
 			a.closeDialog()
-			what := "the curl command"
+			l := codegen.Languages[lang]
+			what := "the " + codeLabel(l) + " code"
+			if l.ID == "curl" {
+				what = "the curl command"
+			}
 			if template {
-				what = "the curl command (with {{variables}})"
+				what += " (with {{variables}})"
 			}
 			a.copyText(current, what)
 		case ev.Key() == tcell.KeyRune && ev.Rune() == 'v':
@@ -523,7 +564,7 @@ func (a *App) showCurl() {
 		}
 		return nil
 	})
-	a.openDialog(tv, 96, 24)
+	a.openDialog(tv, 100, 30)
 }
 
 func (a *App) formatBody() {

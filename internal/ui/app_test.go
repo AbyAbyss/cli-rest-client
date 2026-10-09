@@ -1345,9 +1345,68 @@ func TestCopyAsCurl(t *testing.T) {
 	// A clipboard failure is reported, not hidden.
 	h.do(func() {
 		h.a.copier = func(string) (string, error) { return "", errors.New("no clipboard") }
-		h.a.copyCurl(models.Request{Method: "GET", URL: "https://x.test"})
+		h.a.copyCode(models.Request{Method: "GET", URL: "https://x.test"})
 		if !strings.Contains(h.a.status, "Could not copy: no clipboard") {
 			t.Fatalf("status %q", h.a.status)
+		}
+	})
+}
+
+func TestCodeWindowLanguages(t *testing.T) {
+	h := start(t, nil)
+	var copied []string
+	h.do(func() {
+		h.a.copier = func(text string) (string, error) {
+			copied = append(copied, text)
+			return "test", nil
+		}
+		r := reqAt(t, h.a.ws, "Payment Gateway/Charges/Charge")
+		h.a.loadIntoBuilder(*r, r)
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlG, 0, tcell.ModCtrl)
+	if s := h.screenText(); !strings.Contains(s, "cURL · real values") || !strings.Contains(s, "JavaScript") {
+		t.Fatalf("starts on curl:\n%s", s)
+	}
+	h.key(tcell.KeyRight, 0, 0)
+	if s := h.screenText(); !strings.Contains(s, "Python · real values") || !strings.Contains(s, "requests.post(url, headers=headers, json=payload)") {
+		t.Fatalf("Python:\n%s", s)
+	}
+	h.key(tcell.KeyRune, 'v', 0)
+	if s := h.screenText(); !strings.Contains(s, "Python · {{variables}} kept") || !strings.Contains(s, `url = f"{base_url}/post"`) {
+		t.Fatalf("Python template:\n%s", s)
+	}
+	h.key(tcell.KeyRune, '4', 0)
+	if s := h.screenText(); !strings.Contains(s, "Go · {{variables}} kept") || !strings.Contains(s, "http.NewRequest(http.MethodPost, baseUrl+\"/post\", payload)") {
+		t.Fatalf("Go:\n%s", s)
+	}
+	h.key(tcell.KeyLeft, 0, 0)
+	h.key(tcell.KeyLeft, 0, 0)
+	h.key(tcell.KeyLeft, 0, 0)
+	h.key(tcell.KeyLeft, 0, 0)
+	if s := h.screenText(); !strings.Contains(s, "HTTPie · {{variables}} kept") || !strings.Contains(s, `http POST "${BASE_URL}/post"`) {
+		t.Fatalf("Left wraps around to HTTPie:\n%s", s)
+	}
+	h.key(tcell.KeyRune, '2', 0)
+	h.key(tcell.KeyRune, 'c', 0)
+	h.do(func() {
+		if len(h.a.dialogs) != 0 || len(copied) != 1 || !strings.HasPrefix(copied[0], "import requests") || !strings.Contains(copied[0], "base_url = ") {
+			t.Fatalf("copied: %q", copied)
+		}
+		if !strings.Contains(h.a.status, "Copied the Python code (with {{variables}})") {
+			t.Fatalf("status %q", h.a.status)
+		}
+		if h.a.ws.Settings.CodeLanguage != "python" {
+			t.Fatalf("language not remembered: %q", h.a.ws.Settings.CodeLanguage)
+		}
+		// y in the tree now copies in Python, with real values.
+		h.a.rebuildTree(reqAt(t, h.a.ws, "Auth API/Login"))
+		h.a.tv.SetFocus(h.a.tree)
+	})
+	h.key(tcell.KeyRune, 'y', 0)
+	h.do(func() {
+		if len(copied) != 2 || !strings.Contains(copied[1], `auth=("user", "passwd")`) || !strings.Contains(h.a.status, `Copied "Login" as Python`) {
+			t.Fatalf("tree copy: %q, status %q", copied, h.a.status)
 		}
 	})
 }

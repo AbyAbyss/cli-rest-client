@@ -10,6 +10,7 @@ internal/vars          {{name}} substitution and dynamic variables ($uuid, $time
 internal/engine        Prepare(Request, vars) -> *http.Request (+ missing vars, warnings); Curl()
 internal/script        RunPre (set/unset) and RunTests (assertions and captures)
 internal/curl          curl command line parser (shell quoting, curl options -> Request) and export (Resolved, Template)
+internal/codegen       request -> curl / Python / JavaScript / Go / HTTPie (one Spec, a generator per language)
 internal/clipboard     Copy(text): pbcopy / wl-copy / xclip / xsel / clip, OSC 52 fallback
 internal/postman       Postman import and export (collections, environments, globals)
 internal/cli           headless commands (list, run, env, import, export, curl, history)
@@ -60,6 +61,10 @@ Collections form a tree: `Collection.Folders` holds nested collections (shown as
 ## Environments
 
 `Workspace.Variables` are the globals; `Workspace.Environments` are named sets and `ActiveEnvironment` names the active one. `VariableMap()` merges globals with the active environment on top, and everything that resolves variables (engine, scripts, CLI) goes through it. `SetVariable` updates a variable where it already lives (active environment first, then globals) and puts new ones in the active environment, so script captures land where you'd expect. `ui/env.go` holds the picker and the Variables tab's environment manager.
+
+## Code generation
+
+`codegen.build` turns a request into a `Spec`: method, URL, query fields, headers, Basic auth, and the body as text plus, for JSON, an ordered tree (`Node`). It calls `engine.Prepare` first, so the snippet fails in the same cases a send would. Strings are `Str` values, a list of literal and `{{variable}}` parts: in resolved mode every part is literal, in template mode variables stay as parts and are collected (in order of first use) for the declarations at the top. A variable used as a whole JSON value (`{"n": {{count}}}`) becomes a `NodeBare`, found by quoting such references with a marker before parsing. Each language file (`python.go`, `javascript.go`, `golang.go`, `httpie.go`) only formats a `Spec`; curl goes through `internal/curl`. `run_test.go` executes every snippet against a capture server and compares the request with what the app sends.
 
 ## History
 

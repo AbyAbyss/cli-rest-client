@@ -119,6 +119,14 @@ func TestScreenshots(t *testing.T) {
 	send(h)
 	writeShot(t, h, dir, "tests", "Pre-request script and tests")
 
+	// 4b. Code window: the same request as Python, variables kept.
+	h.key(tcell.KeyCtrlG, 0, tcell.ModCtrl)
+	h.key(tcell.KeyRune, '2', 0)
+	h.key(tcell.KeyRune, 'v', 0)
+	writeShot(t, h, dir, "code", "Code snippets")
+	h.key(tcell.KeyRune, '1', 0)
+	h.key(tcell.KeyEsc, 0, 0)
+
 	// 5. Help overlay.
 	h.key(tcell.KeyF1, 0, 0)
 	writeShot(t, h, dir, "help", "Keyboard shortcuts")

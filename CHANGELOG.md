@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Prebuilt binaries: `make release` / `scripts/release.sh` build macOS, Linux and
+  Windows archives with SHA256SUMS; a Release workflow publishes them on a `v*` tag;
+  `get.sh` installs the right one with a single `curl ... | sh`, no Go needed.
+- Code generation: the `Ctrl+G` window shows the request as cURL, Python (requests),
+  JavaScript (fetch), Go (net/http) or HTTPie; `←`/`→` switch language and the choice
+  is remembered for `y`. Real values or `{{variables}}` as named variables in the code.
+  CLI: `term-rest-client export -lang LANG [-raw]`. Each snippet is run against a test
+  server in the test suite and must send the same request as the app.
 - Copy as cURL: `c` in the `Ctrl+G` window copies the command to the clipboard and `v`
   switches between filled-in values and `{{variables}}`; `y` in the Collections tree
   and History copies a request directly. Uses pbcopy, wl-copy, xclip, xsel or clip,
