@@ -21,13 +21,14 @@ import (
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/pkg/httpclient"
+	"github.com/AbyAbyss/cli-rest-client/pkg/wsclient"
 )
 
 // List prints every saved request as "Collection/Folder/Request" (top-level
 // requests have no prefix).
 func List(out io.Writer, ws *models.Workspace) int {
 	ws.WalkRequests(func(path []*models.Collection, r *models.Request) {
-		fmt.Fprintf(out, "%-7s %s\n", r.Method, joinPath(path, r.Name))
+		fmt.Fprintf(out, "%-7s %s\n", r.Label(), joinPath(path, r.Name))
 	})
 	return 0
 }
@@ -120,7 +121,7 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		for k, v := range overrides {
 			variables[k] = v
 		}
-		fmt.Fprintf(out, "%s %s\n", r.Method, r.Name)
+		fmt.Fprintf(out, "%s %s\n", r.Label(), r.Name)
 
 		assignments, errs := script.RunPre(r.PreRequest, variables)
 		changed = apply(ws, assignments, overrides) || changed
@@ -143,6 +144,21 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		for _, w := range p.Warnings {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
+		if r.Type == models.TypeWebSocket {
+			events, resp, err := runWebSocket(p, *streamFor, ws.Settings.InsecureSkipVerify, out)
+			if err != nil {
+				fmt.Fprintf(out, "  error: %v\n", err)
+				failed = true
+				continue
+			}
+			results := script.RunTests(r.Tests, script.Response{
+				Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events,
+			}, variables)
+			failed = report(out, results) || failed
+			changed = apply(ws, captures(results), overrides) || changed
+			continue
+		}
+
 		// A stream is followed until it ends or -stream runs out; then it is
 		// stopped and the tests run on what arrived.
 		ctx, cancel := context.WithTimeout(context.Background(), *streamFor)
@@ -173,20 +189,8 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		results := script.RunTests(r.Tests, script.Response{
 			Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events,
 		}, variables)
-		var captures []script.Assignment
-		for _, tr := range results {
-			switch {
-			case tr.Capture != nil:
-				captures = append(captures, *tr.Capture)
-				fmt.Fprintf(out, "  → %s\n", tr.Message)
-			case tr.Passed:
-				fmt.Fprintf(out, "  ✓ %s\n", tr.Source)
-			default:
-				failed = true
-				fmt.Fprintf(out, "  ✗ %s  (%s)\n", tr.Source, tr.Message)
-			}
-		}
-		changed = apply(ws, captures, overrides) || changed
+		failed = report(out, results) || failed
+		changed = apply(ws, captures(results), overrides) || changed
 
 		if *verbose {
 			fmt.Fprintf(out, "  > %s %s\n", p.Request.Method, p.Request.URL.RequestURI())
@@ -212,6 +216,32 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		return 1
 	}
 	return 0
+}
+
+// report prints one line per test result and reports whether any failed.
+func report(out io.Writer, results []script.Result) (failed bool) {
+	for _, tr := range results {
+		switch {
+		case tr.Capture != nil:
+			fmt.Fprintf(out, "  → %s\n", tr.Message)
+		case tr.Passed:
+			fmt.Fprintf(out, "  ✓ %s\n", tr.Source)
+		default:
+			failed = true
+			fmt.Fprintf(out, "  ✗ %s  (%s)\n", tr.Source, tr.Message)
+		}
+	}
+	return failed
+}
+
+func captures(results []script.Result) []script.Assignment {
+	var out []script.Assignment
+	for _, tr := range results {
+		if tr.Capture != nil {
+			out = append(out, *tr.Capture)
+		}
+	}
+	return out
 }
 
 func printHeaders(out io.Writer, prefix string, h http.Header) {
@@ -596,4 +626,55 @@ func Curl(in io.Reader, out, errOut io.Writer, ws *models.Workspace, store *stor
 		}
 	}
 	return 0
+}
+
+// wsQuiet is how long run waits for more WebSocket messages after the last
+// one before it disconnects.
+const wsQuiet = time.Second
+
+// runWebSocket connects, sends the request's message, and collects what
+// comes back until the server closes, limit passes, or nothing arrives for
+// wsQuiet. It returns the received messages and a response summary for the
+// tests (status 101, the last message as the body).
+func runWebSocket(p *engine.Prepared, limit time.Duration, insecure bool, out io.Writer) ([]string, *httpclient.Response, error) {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	conn, hs, err := wsclient.Dial(ctx, p.Request, wsclient.Options{Timeout: limit, InsecureSkipVerify: insecure})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer conn.Close()
+	sent := 0
+	if p.Message != "" {
+		if _, err := conn.Send(ctx, p.Message); err != nil {
+			return nil, nil, err
+		}
+		sent++
+	}
+	var events []string
+	how := ""
+	for how == "" {
+		readCtx, stop := context.WithTimeout(ctx, wsQuiet)
+		m, err := conn.Read(readCtx)
+		quiet := readCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+		stop()
+		switch {
+		case err == nil:
+			events = append(events, m.Data)
+		case quiet:
+			how = fmt.Sprintf("quiet for %s", wsQuiet)
+		case ctx.Err() != nil:
+			how = fmt.Sprintf("stopped after %s", limit)
+		default:
+			how = wsclient.Describe(err)
+		}
+	}
+	elapsed := time.Since(start)
+	fmt.Fprintf(out, "  %d Switching Protocols  %d ms  %d sent, %d received (%s)\n", hs.Status, elapsed.Milliseconds(), sent, len(events), how)
+	resp := &httpclient.Response{StatusCode: hs.Status, Headers: hs.Headers, Duration: elapsed}
+	if len(events) > 0 {
+		resp.Body = []byte(events[len(events)-1])
+	}
+	return events, resp, nil
 }

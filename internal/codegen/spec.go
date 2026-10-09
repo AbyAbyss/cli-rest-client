@@ -17,6 +17,9 @@ import (
 type Part struct {
 	Lit string
 	Var string // variable name when this part is a reference
+	// Escape URL-encodes the variable's value at run time (a variable in a
+	// query string).
+	Escape bool
 }
 
 // Str is a string that may contain variable references. In resolved mode

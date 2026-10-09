@@ -74,7 +74,9 @@ func fixedValues(base string) map[string]string {
 func testRequests() []models.Request {
 	var out []models.Request
 	storage.SampleWorkspace().WalkRequests(func(_ []*models.Collection, r *models.Request) {
-		out = append(out, *r)
+		if r.Type != models.TypeWebSocket { // ws_run_test.go covers those
+			out = append(out, *r)
+		}
 	})
 	req := func(name, method, u, bodyType, body string) models.Request {
 		r := models.NewRequest(name)

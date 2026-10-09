@@ -26,6 +26,9 @@ type Prepared struct {
 	Missing []string
 	// Warnings are non-fatal problems, such as an invalid JSON body.
 	Warnings []string
+	// Message is the resolved message of a WebSocket request. Request is
+	// then the handshake: a GET to the ws:// or wss:// URL.
+	Message string
 }
 
 type resolver struct {
@@ -51,14 +54,29 @@ func Prepare(req models.Request, variables map[string]string) (*Prepared, error)
 	if rawURL == "" {
 		return nil, errors.New("URL is empty")
 	}
+	ws := req.Type == models.TypeWebSocket
 	if !strings.Contains(rawURL, "://") {
-		rawURL = "http://" + rawURL
+		if ws {
+			rawURL = "ws://" + rawURL
+		} else {
+			rawURL = "http://" + rawURL
+		}
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if ws {
+		switch u.Scheme { // http(s) URLs are accepted, as browsers do
+		case "http":
+			u.Scheme = "ws"
+		case "https":
+			u.Scheme = "wss"
+		case "ws", "wss":
+		default:
+			return nil, fmt.Errorf("unsupported URL scheme %q for a WebSocket (use ws or wss)", u.Scheme)
+		}
+	} else if u.Scheme != "http" && u.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported URL scheme %q (use http or https)", u.Scheme)
 	}
 	if u.Host == "" {
@@ -107,6 +125,12 @@ func Prepare(req models.Request, variables map[string]string) (*Prepared, error)
 			}
 			headers.Set(key, r.sub(req.Auth.Value))
 		}
+	}
+
+	if ws {
+		// The handshake carries no body; the body is the first message.
+		p.Message = r.sub(req.Body)
+		req.Method, req.BodyType = http.MethodGet, models.BodyNone
 	}
 
 	var graphQL []byte // the POST body of a GraphQL request

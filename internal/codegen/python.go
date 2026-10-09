@@ -94,12 +94,16 @@ func pyStr(s Str, ids map[string]string) string {
 	if t, ok := s.Plain(); ok {
 		return quoteJSON(t)
 	}
-	if len(s) == 1 {
+	if len(s) == 1 && !s[0].Escape {
 		return ids[s[0].Var]
 	}
 	var sb strings.Builder
 	sb.WriteString(`f"`)
 	for _, p := range s {
+		if p.Var != "" && p.Escape {
+			sb.WriteString("{quote_plus(" + ids[p.Var] + ")}")
+			continue
+		}
 		if p.Var != "" {
 			sb.WriteString("{" + ids[p.Var] + "}")
 			continue

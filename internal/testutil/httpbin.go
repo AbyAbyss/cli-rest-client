@@ -70,6 +70,7 @@ func NewHTTPBin() *httptest.Server {
 	})
 	addStreams(mux)
 	addGraphQL(mux)
+	addWebSocket(mux)
 	return httptest.NewServer(mux)
 }
 
@@ -86,4 +87,5 @@ func UseLocal(ws *models.Workspace, base string) {
 	ws.SetVariable("baseUrl", base)
 	ws.SetVariable("graphqlUrl", base+"/graphql")
 	ws.SetVariable("sseUrl", base+"/sse?count=3&interval=10")
+	ws.SetVariable("wsUrl", "ws"+strings.TrimPrefix(base, "http")+"/ws")
 }

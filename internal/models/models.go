@@ -4,6 +4,12 @@ package models
 // Supported HTTP methods, in the order they appear in the method picker.
 var Methods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
+// Request types. The zero value is an HTTP request.
+const (
+	TypeHTTP      = ""
+	TypeWebSocket = "websocket"
+)
+
 // Auth types.
 const (
 	AuthNone   = "none"
@@ -51,7 +57,10 @@ type Auth struct {
 
 // Request is a saved (or in-progress) HTTP request.
 type Request struct {
-	Name     string     `json:"name"`
+	Name string `json:"name"`
+	// Type is TypeHTTP or TypeWebSocket. For WebSocket requests the body is
+	// the message to send and Method is unused.
+	Type     string     `json:"type,omitempty"`
 	Method   string     `json:"method"`
 	URL      string     `json:"url"`
 	Params   []KeyValue `json:"params,omitempty"`
@@ -74,6 +83,14 @@ func NewRequest(name string) Request {
 		Auth:     Auth{Type: AuthNone, In: "header"},
 		BodyType: BodyNone,
 	}
+}
+
+// Label is what lists show for the request: its method, or WS.
+func (r *Request) Label() string {
+	if r.Type == TypeWebSocket {
+		return "WS"
+	}
+	return r.Method
 }
 
 // Normalize fills in defaults for fields that may be missing in older files.
@@ -106,7 +123,7 @@ func (r Request) Clone() Request {
 
 // Equal reports whether two requests have the same content.
 func (r Request) Equal(o Request) bool {
-	if r.Name != o.Name || r.Method != o.Method || r.URL != o.URL || r.Auth != o.Auth ||
+	if r.Name != o.Name || r.Type != o.Type || r.Method != o.Method || r.URL != o.URL || r.Auth != o.Auth ||
 		r.BodyType != o.BodyType || r.Body != o.Body || r.GraphQLVariables != o.GraphQLVariables ||
 		r.PreRequest != o.PreRequest || r.Tests != o.Tests {
 		return false

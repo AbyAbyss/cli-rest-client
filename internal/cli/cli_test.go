@@ -332,3 +332,31 @@ func TestRunStreams(t *testing.T) {
 		}
 	}
 }
+
+func TestRunWebSocket(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	echo := models.NewRequest("Echo")
+	echo.Type, echo.URL, echo.Body = models.TypeWebSocket, srv.URL+"/ws", `{"n":1}`
+	echo.Tests = "status == 101\nevents == 2\nevent[0].json.type == welcome\nevent[-1].json.n == 1\njson.n == 1"
+	bye := models.NewRequest("Bye")
+	bye.Type, bye.URL, bye.Body = models.TypeWebSocket, srv.URL+"/ws", "bye"
+	bye.Tests = "events == 1"
+	ws.Collections = []*models.Collection{{Name: "Sockets", Requests: []*models.Request{&echo, &bye}}}
+
+	var out, errOut bytes.Buffer
+	start := time.Now()
+	if code := Run(&out, &errOut, ws, nil, []string{"Sockets"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"WS Echo", "101 Switching Protocols", "1 sent, 2 received (quiet for 1s)", "✓ event[-1].json.n == 1", "1 sent, 1 received (closed normally (1000): bye)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if d := time.Since(start); d > 4*time.Second {
+		t.Errorf("run should stop when it goes quiet, took %s", d)
+	}
+}

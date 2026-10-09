@@ -379,6 +379,10 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 			a.cancelRequest()
 			return nil
 		}
+		if a.wsSession().open() {
+			a.wsDisconnect()
+			return nil
+		}
 		if focus == a.urlInput {
 			return ev // closes autocomplete first; the done func handles the rest
 		}

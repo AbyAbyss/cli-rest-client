@@ -61,6 +61,11 @@ func exportItems(c *models.Collection, res *ExportResult, path string) []any {
 		})
 	}
 	for _, r := range c.Requests {
+		if r.Type == models.TypeWebSocket {
+			// Collection v2.1 has no WebSocket requests; Postman keeps them separately.
+			res.Notes = append(res.Notes, fmt.Sprintf("%s / %s: WebSocket requests can't go in a Postman collection file, so it was left out", path, r.Name))
+			continue
+		}
 		res.Requests++
 		items = append(items, exportRequest(r, res, path+" / "+r.Name))
 	}

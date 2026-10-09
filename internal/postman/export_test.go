@@ -92,6 +92,9 @@ func TestRoundTripSampleWorkspace(t *testing.T) {
 		}
 		before, after := requestsByPath(c), requestsByPath(res.Collection)
 		for path, r1 := range before {
+			if r1.Type == models.TypeWebSocket {
+				continue // not representable in a collection file (see TestExportSkipsWebSockets)
+			}
 			r2 := after[path]
 			if r2 == nil {
 				t.Fatalf("%s/%s missing", c.Name, path)
@@ -227,7 +230,7 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 
 	checked := 0
 	ws.WalkRequests(func(_ []*models.Collection, r *models.Request) {
-		if strings.TrimSpace(r.Tests) == "" {
+		if strings.TrimSpace(r.Tests) == "" || r.Type == models.TypeWebSocket {
 			return
 		}
 		vars := ws.VariableMap()
@@ -297,5 +300,16 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 	})
 	if checked < 15 {
 		t.Fatalf("only %d assertions compared", checked)
+	}
+}
+
+func TestExportSkipsWebSockets(t *testing.T) {
+	ws := models.NewRequest("Socket")
+	ws.Type, ws.URL = models.TypeWebSocket, "wss://x.test"
+	get := models.NewRequest("Get")
+	get.URL = "https://x.test"
+	res, err := ExportCollection(&models.Collection{Name: "Mixed", Requests: []*models.Request{&ws, &get}})
+	if err != nil || res.Requests != 1 || len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "Mixed / Socket: WebSocket") {
+		t.Fatalf("%v %d %v", err, res.Requests, res.Notes)
 	}
 }

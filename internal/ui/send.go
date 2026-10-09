@@ -38,6 +38,7 @@ type sendResult struct {
 	missing     []string
 	warnings    []string
 	tests       []script.Result
+	socket      *wsSession // a WebSocket connection instead of a response
 }
 
 func (a *App) buildResponse() {
@@ -115,6 +116,29 @@ func (a *App) toggleSection(id string) {
 	a.response.ScrollTo(row, col)
 }
 
+// writeTests writes the Tests section.
+func (a *App) writeTests(res *sendResult, line func(string, ...any), section func(id, title, extra string) bool) {
+	t, esc := a.theme, tview.Escape
+	passed, total := testCounts(res.tests)
+	summary := t.HexSuccess
+	if passed < total {
+		summary = t.HexError
+	}
+	if !section(secTests, "Tests", fmt.Sprintf("[%s]%d/%d passed", summary, passed, total)) {
+		return
+	}
+	for _, tr := range res.tests {
+		switch {
+		case tr.Capture != nil:
+			line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
+		case tr.Passed:
+			line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
+		default:
+			line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
+		}
+	}
+}
+
 // writeEvents lists stream events with their arrival time, type and id.
 // JSON data is shown compact and highlighted; other data as text.
 func writeEvents(line func(string, ...any), events []httpclient.Event, t *Theme) {
@@ -177,6 +201,11 @@ func (a *App) clientOptions() httpclient.Options {
 // send runs the pre-request script, sends the request in the background and
 // runs the tests when the response arrives.
 func (a *App) send() {
+	if a.req.Type == models.TypeWebSocket {
+		a.wsSend()
+		return
+	}
+	a.wsDisconnect() // an HTTP request replaces the connection in the pane
 	if a.sending {
 		a.setStatus(levelWarning, "A request is already running. Press Esc to cancel it.")
 		return
@@ -439,7 +468,22 @@ func (a *App) renderResponse() {
 	}
 	line("")
 
+	// section writes a clickable, foldable heading and reports whether
+	// the section's content should be shown.
+	section := func(id, title, extra string) bool {
+		icon := "▾"
+		if a.sectionCollapsed(id) {
+			icon = "▸"
+		}
+		line("")
+		line(`["sec-%s"][%s]%s [%s::b]%s[-:-:-] %s  [%s]· %c[""]`,
+			id, t.HexMuted, icon, t.HexAccent, title, extra, t.HexMuted, sectionKey(id))
+		return !a.sectionCollapsed(id)
+	}
+
 	switch {
+	case res.socket != nil:
+		a.renderWebSocket(res, line, section)
 	case a.sending && res == a.result && res.resp == nil && res.err == nil && !res.cancelled:
 		line("[%s]Sending…  [%s](Esc to cancel)", t.HexWarning, t.HexMuted)
 		a.response.SetTitle(" Response ")
@@ -490,37 +534,8 @@ func (a *App) renderResponse() {
 		}
 		a.response.SetTitle(fmt.Sprintf(" Response · [%s]%d[-] ", color, r.StatusCode))
 
-		// section writes a clickable, foldable heading and reports whether
-		// the section's content should be shown.
-		section := func(id, title, extra string) bool {
-			icon := "▾"
-			if a.sectionCollapsed(id) {
-				icon = "▸"
-			}
-			line("")
-			line(`["sec-%s"][%s]%s [%s::b]%s[-:-:-] %s  [%s]· %c[""]`,
-				id, t.HexMuted, icon, t.HexAccent, title, extra, t.HexMuted, sectionKey(id))
-			return !a.sectionCollapsed(id)
-		}
-
 		if len(res.tests) > 0 {
-			passed, total := testCounts(res.tests)
-			summary := t.HexSuccess
-			if passed < total {
-				summary = t.HexError
-			}
-			if section(secTests, "Tests", fmt.Sprintf("[%s]%d/%d passed", summary, passed, total)) {
-				for _, tr := range res.tests {
-					switch {
-					case tr.Capture != nil:
-						line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
-					case tr.Passed:
-						line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
-					default:
-						line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
-					}
-				}
-			}
+			a.writeTests(res, line, section)
 		}
 
 		if section(secReqHeaders, "Request Headers", fmt.Sprintf("[%s](%d)", t.HexMuted, len(res.reqHeaders))) {
@@ -581,7 +596,7 @@ func (a *App) copyCode(r models.Request) {
 	}
 	name := r.Name
 	if name == "" {
-		name = r.Method + " request"
+		name = r.Label() + " request"
 	}
 	a.copyText(snip.Text, fmt.Sprintf("%q as %s", name, codeLabel(l)))
 	if len(snip.Missing) > 0 {

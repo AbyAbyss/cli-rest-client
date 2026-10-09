@@ -168,6 +168,10 @@ func SampleWorkspace() *models.Workspace {
 	live := req("Live events (SSE)", "GET", "{{sseUrl}}", models.BodyNone, "")
 	live.Tests = "status == 200\nheader Content-Type contains event-stream\nevents >= 1"
 
+	echo := req("Echo (WebSocket)", "GET", "{{wsUrl}}", models.BodyJSON, "{\n  \"hello\": \"from term-rest-client\"\n}")
+	echo.Type = models.TypeWebSocket
+	echo.Tests = "events >= 1\nevent[-1].json.hello == \"from term-rest-client\""
+
 	health := req("Health Check", "GET", "{{baseUrl}}/get", models.BodyNone, "")
 	health.Tests = "status == 200\ntime < 2000"
 
@@ -191,7 +195,7 @@ func SampleWorkspace() *models.Workspace {
 				Name:    "Payment Gateway",
 				Folders: []*models.Collection{{Name: "Charges", Requests: []*models.Request{charge}}},
 			},
-			{Name: "API Types", Requests: []*models.Request{countries, live}},
+			{Name: "API Types", Requests: []*models.Request{countries, live, echo}},
 		},
 		Requests: []*models.Request{health},
 		Variables: []models.KeyValue{
@@ -199,6 +203,7 @@ func SampleWorkspace() *models.Workspace {
 			{Key: "graphqlUrl", Value: "https://countries.trevorblades.com/graphql"},
 			{Key: "country", Value: "IN"},
 			{Key: "sseUrl", Value: "https://stream.wikimedia.org/v2/stream/recentchange"},
+			{Key: "wsUrl", Value: "wss://ws.postman-echo.com/raw"},
 		},
 		Environments: []*models.Environment{
 			{Name: "httpbin.org", Variables: []models.KeyValue{{Key: "baseUrl", Value: "https://httpbin.org"}}},

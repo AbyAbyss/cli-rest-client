@@ -18,6 +18,9 @@ func TestTemplateRoundTrip(t *testing.T) {
 	vars["orderId"] = "o-1"
 	checked := 0
 	ws.WalkRequests(func(_ []*models.Collection, r *models.Request) {
+		if r.Type == models.TypeWebSocket {
+			return // curl can't do WebSocket; codegen writes websocat for those
+		}
 		cmd := Template(*r)
 		if strings.Contains(cmd.Text, "{{$") {
 			return // dynamic values differ on every run

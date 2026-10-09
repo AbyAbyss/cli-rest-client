@@ -81,11 +81,12 @@ func (a *App) newFlex(dir int) *tview.Flex {
 // ---------- request bar ----------
 
 func (a *App) buildRequestBar() {
-	a.methodDrop = tview.NewDropDown().SetOptions(models.Methods, func(text string, _ int) {
+	a.methodDrop = tview.NewDropDown().SetOptions(append(append([]string(nil), models.Methods...), "WS"), func(text string, _ int) {
 		if a.loading {
 			return
 		}
-		a.req.Method = text
+		a.setRequestType(text)
+		a.layoutBody()
 		a.requestChanged()
 	})
 	a.methodDrop.SetTextOptions(" ", " ", "", "", "")
@@ -383,6 +384,9 @@ func (a *App) buildBodyTab() *tab {
 		AddItem(a.bodyType, 1, 0, false).
 		AddItem(a.bodyEditors, 0, 1, false).
 		AddItem(a.newHint(func(t *Theme) string {
+			if a.req.Type == models.TypeWebSocket {
+				return hintLine(t, "WebSocket: Ctrl+R connects, then sends this message", "Esc disconnects", "Tests run on the received messages when it closes")
+			}
 			if a.req.BodyType == models.BodyGraphQL {
 				return hintLine(t, "F6 browses the schema and writes a query for you", "Ctrl+P formats the variables", "GET sends the query in the URL")
 			}
@@ -551,7 +555,12 @@ func (a *App) loadIntoBuilder(r models.Request, linked *models.Request) {
 	a.loading = true
 	a.req = r
 	a.linked = linked
-	a.methodDrop.SetCurrentOption(indexOf(models.Methods, r.Method))
+	a.wsDisconnect() // a connection belongs to the request it was opened from
+	if r.Type == models.TypeWebSocket {
+		a.methodDrop.SetCurrentOption(len(models.Methods))
+	} else {
+		a.methodDrop.SetCurrentOption(indexOf(models.Methods, r.Method))
+	}
 	if indexOf(models.Methods, r.Method) == 0 && r.Method != "GET" {
 		a.req.Method = "GET"
 	}
@@ -612,10 +621,20 @@ func (a *App) renderTitles() {
 		dirty = fmt.Sprintf(" [%s]●[-]", a.theme.HexWarning)
 	}
 	a.urlInput.SetTitle(fmt.Sprintf(" [%s]%s[-]%s ", a.theme.HexAccent, tview.Escape(where), dirty))
-	if a.req.BodyType == models.BodyGraphQL {
+	label := "SEND"
+	switch {
+	case a.req.Type == models.TypeWebSocket && a.wsSession().open():
+		a.bodyArea.SetTitle(" Message · WebSocket ")
+	case a.req.Type == models.TypeWebSocket:
+		label = "CONNECT"
+		a.bodyArea.SetTitle(" Message · WebSocket ")
+	case a.req.BodyType == models.BodyGraphQL:
 		a.bodyArea.SetTitle(" Query · GraphQL ")
-	} else {
+	default:
 		a.bodyArea.SetTitle(fmt.Sprintf(" Body · %s ", bodyLabels[indexOf(models.BodyTypes, a.req.BodyType)]))
+	}
+	if a.sendBtn.GetLabel() != label {
+		a.sendBtn.SetLabel(label)
 	}
 }
 
