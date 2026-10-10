@@ -3,8 +3,10 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/testutil"
@@ -26,19 +28,60 @@ func TestGraphQLSchemaBrowserAndSend(t *testing.T) {
 	h.key(tcell.KeyCtrlT, 0, tcell.ModCtrl)
 	h.eventually("schema dialog", func() bool { return len(h.a.dialogs) == 1 })
 	s := h.screenText()
-	for _, want := range []string{"GraphQL schema", "countries(continent: String): [Country!]!", "country(code: ID!): Country", "A country by its ISO"} {
+	for _, want := range []string{"GraphQL schema", "countries(continent: String): [Country!]!", "country(code: ID!): Country",
+		"Details", "All countries, optionally on one continent.", "i writes this query"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q:\n%s", want, s)
 		}
 	}
-	// → shows the fields of Country under "country".
+	// Moving to "country" shows its arguments, its type's fields and the query.
 	h.key(tcell.KeyDown, 0, 0)
-	h.key(tcell.KeyRight, 0, 0)
-	if s := h.screenText(); !strings.Contains(s, "capital: String") || !strings.Contains(s, "continent: Continent!") {
-		t.Fatalf("expanded:\n%s", s)
+	s = h.screenText()
+	for _, want := range []string{"A country by its ISO 3166 code.", "Arguments", "code: ID! (required)", "Country fields", "query Country($code: ID!) {"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("details missing %q:\n%s", want, s)
+		}
 	}
-	// Enter writes a query for it.
+	// Enter opens it in the tree; the browser stays open.
 	h.key(tcell.KeyEnter, 0, 0)
+	if s := h.screenText(); len(h.a.dialogs) != 1 || !strings.Contains(s, "▾ country(") || !strings.Contains(s, "capital: String") {
+		t.Fatalf("Enter should open the field:\n%s", s)
+	}
+	// A mouse click opens a field too, without closing anything.
+	x, y := -1, -1
+	for row, l := range strings.Split(h.screenText(), "\n") {
+		if i := strings.Index(l, "▸ countries("); i >= 0 {
+			x, y = len([]rune(l[:i]))+2, row
+		}
+	}
+	if y < 0 {
+		t.Fatal("countries row not found")
+	}
+	h.screen.InjectMouse(x, y, tcell.Button1, 0)
+	h.screen.InjectMouse(x, y, tcell.ButtonNone, 0)
+	opened := false
+	for i := 0; i < 100 && !opened; i++ { // screenText pauses the UI itself, so not inside eventually
+		opened = strings.Contains(h.screenText(), "▾ countries(")
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !opened {
+		t.Fatalf("a click should open countries:\n%s", h.screenText())
+	}
+	if len(h.a.dialogs) != 1 {
+		t.Fatal("a click must not close the browser")
+	}
+	// On a nested field, i writes the query for its top-level field.
+	h.do(func() {
+		for _, n := range h.a.tv.GetFocus().(*tview.TreeView).GetRoot().GetChildren()[0].GetChildren()[1].GetChildren() {
+			if ref := n.GetReference().(*schemaRef); ref.field.Name == "capital" {
+				h.a.tv.GetFocus().(*tview.TreeView).SetCurrentNode(n)
+			}
+		}
+	})
+	if s := h.screenText(); !strings.Contains(s, "Country.capital: String") || !strings.Contains(s, "writes the query for country") {
+		t.Fatalf("nested details:\n%s", s)
+	}
+	h.key(tcell.KeyRune, 'i', 0)
 	h.do(func() {
 		if len(h.a.dialogs) != 0 || h.a.req.BodyType != models.BodyGraphQL || h.a.req.Method != "POST" {
 			t.Fatalf("dialogs %d, body %s, method %s", len(h.a.dialogs), h.a.req.BodyType, h.a.req.Method)

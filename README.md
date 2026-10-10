@@ -49,7 +49,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | ![Server-Sent Events arriving live](assets/screenshots/streaming.png) | ![WebSocket message log](assets/screenshots/websocket.png) |
 | **Streaming**: Server-Sent Events and NDJSON appear as they arrive | **WebSocket**: connect, send, and watch what comes back |
 | ![GraphQL schema browser](assets/screenshots/graphql-schema.png) | ![GraphQL query and variables](assets/screenshots/graphql.png) |
-| **GraphQL schema** (`Ctrl+T`): pick a field and get a query for it | **GraphQL**: query and variables side by side |
+| **GraphQL schema** (`Ctrl+T`): browse the types, see a field's details, and `i` writes the query | **GraphQL**: query and variables side by side |
 
 ## Quick Start
 
@@ -386,7 +386,11 @@ The sample **API Types / Live events (SSE)** request follows Wikimedia's public 
 
 Choose **GraphQL** as the body type. The Body tab splits into a **Query** editor and a **Variables** editor (a JSON object), and the request is sent as `{"query": ..., "variables": ...}` with `Content-Type: application/json`. A GET request sends both in the URL instead, as GraphQL over HTTP describes. `{{variables}}` work in both editors.
 
-Press `Ctrl+T` (or `F6`) to browse the server's schema. The app sends an introspection query to the URL, with the request's headers and auth, and lists the query, mutation and subscription fields with their arguments and types. `→` shows the fields of a field's type. `Enter` on a top-level field writes a query for it, with a variable for each argument and the result's fields already selected:
+Press `Ctrl+T` (or `F6`) to browse the server's schema. The app sends an introspection query to the URL, with the request's headers and auth, and lists the query, mutation and subscription fields with their arguments and types:
+
+- **`Enter`, `Space` or a click** opens or closes a field to show its type's fields, so you can walk the whole schema (`→` / `←` work too).
+- **The Details pane** shows the selected field's description, its arguments (required ones marked), the fields of the type it returns, and the query `i` would write.
+- **`i`** writes that query into the Body tab and closes the browser. On a nested field it writes the query for the top-level field it's under, with a variable for each argument and the result's fields already selected:
 
 ```graphql
 query Country($code: ID!) {
@@ -403,7 +407,7 @@ query Country($code: ID!) {
 }
 ```
 
-Fill in the variables and send. `r` in the browser reloads the schema. Postman collections with GraphQL bodies import and export as GraphQL, and pasting a curl command whose body is a GraphQL query turns it into one. Try the sample **API Types / Country (GraphQL)**, which uses the public countries API.
+Fill in the variables and send. `r` in the browser reloads the schema, `Esc` closes it. Postman collections with GraphQL bodies import and export as GraphQL, and pasting a curl command whose body is a GraphQL query turns it into one. Try the sample **API Types / Country (GraphQL)**, which uses the public countries API.
 
 ### WebSocket
 

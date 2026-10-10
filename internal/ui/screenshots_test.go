@@ -144,12 +144,12 @@ func TestScreenshots(t *testing.T) {
 
 	// 4d. GraphQL schema browser, then the query it writes, sent.
 	open(h, reqAt(t, ws, "API Types/Country (GraphQL)"), 3)
-	h.key(tcell.KeyF6, 0, 0)
+	h.key(tcell.KeyCtrlT, 0, tcell.ModCtrl)
 	h.eventually("schema", func() bool { return len(h.a.dialogs) == 1 })
 	h.key(tcell.KeyDown, 0, 0)
-	h.key(tcell.KeyRight, 0, 0)
-	writeShot(t, h, dir, "graphql-schema", "GraphQL schema")
 	h.key(tcell.KeyEnter, 0, 0)
+	writeShot(t, h, dir, "graphql-schema", "GraphQL schema")
+	h.key(tcell.KeyRune, 'i', 0)
 	h.do(func() {
 		h.a.gqlVarsArea.SetText("{\n  \"code\": \"{{country}}\"\n}", false)
 		h.a.tv.SetFocus(h.a.urlInput)
