@@ -6,12 +6,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/cli"
+	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/internal/ui"
+	"github.com/AbyAbyss/cli-rest-client/internal/webui"
 )
 
 var (
@@ -29,10 +33,16 @@ func run(args []string) int {
 	fs := flag.NewFlagSet("term-rest-client", flag.ContinueOnError)
 	dataPath := fs.String("data", "", "workspace file (default: $"+storage.EnvDataPath+" or <config dir>/term-rest-client/workspace.json)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
+	gui := fs.Bool("gui", false, "open the browser interface instead of the terminal one")
+	port := fs.Int("port", 0, "with -gui: port to listen on (default: a free one; a busy port falls back to a free one)")
+	lan := fs.Bool("lan", false, "with -gui: let other devices on your network open it (they still need the printed link)")
+	noOpen := fs.Bool("no-open", false, "with -gui: print the link without opening a browser")
 	fs.Usage = func() {
 		out := fs.Output()
 		fmt.Fprintf(out, "Usage:\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE]                 start the interactive UI\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] -gui [-port N] [-lan] [-no-open]\n")
+		fmt.Fprintf(out, "                                                open the browser interface (requests still run here, so no CORS)\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] list            list saved requests\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
 		fmt.Fprintf(out, "                                                send saved requests and run their tests\n")
@@ -111,10 +121,77 @@ func run(args []string) int {
 			fmt.Fprintf(os.Stderr, "warning: cannot create %s: %v\n", path, err)
 		}
 	}
+	if *gui {
+		return runGUI(ws, store, *port, *lan, *noOpen)
+	}
 	app := ui.New(ws, store, ui.BuildInfo{Version: Version, BuildTime: BuildTime})
 	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
 	return 0
+}
+
+func runGUI(ws *models.Workspace, store *storage.Store, port int, lan, noOpen bool) int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	err := webui.Run(ctx, ws, store, webui.Options{
+		Port: port, LAN: lan,
+		Info: webui.Info{Version: Version, BuildTime: BuildTime},
+		Ready: func(a webui.Addresses) {
+			fmt.Printf("\n  term-rest-client GUI is running\n\n")
+			if a.Fallback != "" {
+				fmt.Printf("  Note:    %s\n\n", a.Fallback)
+			}
+			for i, u := range a.Local {
+				label := "Local:  "
+				if i > 0 {
+					label = "        "
+				}
+				fmt.Printf("  %s %s\n", label, u)
+			}
+			switch {
+			case lan && len(a.Network) == 0:
+				fmt.Printf("  Network: no network address found\n")
+			case lan:
+				for i, u := range a.Network {
+					label := "Network:"
+					if i > 0 {
+						label = "        "
+					}
+					fmt.Printf("  %s %s\n", label, u)
+				}
+			default:
+				fmt.Printf("  Network: use -lan to open it from other devices\n")
+			}
+			fmt.Printf("\n  The link carries a one-time key; keep it private. Press Ctrl+C to stop.\n\n")
+			if !noOpen {
+				if err := openBrowser(a.Open()); err != nil {
+					fmt.Printf("  Couldn't open a browser (%v). Open the Local link yourself.\n\n", err)
+				}
+			}
+		},
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	return 0
+}
+
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() //nolint:errcheck // reap the process
+	return nil
 }
