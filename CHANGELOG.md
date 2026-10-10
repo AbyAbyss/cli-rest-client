@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `Ctrl+T` opens the GraphQL schema browser. `F6` still works, but on Macs it turns on
+  Do Not Disturb unless `fn` is held. The README has a macOS section on function keys
+  and on making Option work as Alt in Terminal.app and iTerm2.
+
+### Changed
+- The GraphQL schema browser has a Details pane (description, arguments, the result
+  type's fields, and the query it would write). `Enter`, `Space` and clicks now open and
+  close fields instead of replacing the query, and `i` inserts the query, also from
+  nested fields.
+
+### Fixed
+- An empty GraphQL body showed a JSON example (`{"name": "{{name}}"}`) as its
+  placeholder, which looked like a query that was already there. The Query and
+  Variables editors now show GraphQL examples and mention F6, and sending an empty
+  query says to type one or press F6.
+- Errors before sending (an empty query, a bad URL, a failing pre-request script) showed
+  "No Environment" even with an environment selected.
+
+## [0.3.0] - 2026-10-10
+
+### Added
 - Streaming responses: Server-Sent Events and NDJSON are shown live, each event with
   its arrival time, type and id. The timeout stops at the headers, `Esc` stops the
   stream and keeps what arrived, and History keeps it. Test subjects `events` and
@@ -128,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.1.0
 

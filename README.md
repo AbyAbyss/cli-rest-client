@@ -11,7 +11,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 - **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, plus WebSocket, with a URL bar that autocompletes `{{variables}}`.
 - **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML, form-urlencoded or GraphQL bodies. Any line can be disabled by starting it with `#`.
-- **GraphQL**: a Query editor and a Variables editor side by side, and a schema browser (`F6`) that reads the server's schema and writes a query for any field.
+- **GraphQL**: a Query editor and a Variables editor side by side, and a schema browser (`Ctrl+T`) that reads the server's schema and writes a query for any field.
 - **Streaming responses**: Server-Sent Events and NDJSON show up live as they arrive, each event with its time. `Esc` stops a stream and keeps what came in; tests can count and inspect events.
 - **WebSocket**: connect with your headers and auth, send messages, and watch a live log of what goes out and comes back. Tests run on the received messages when the connection ends.
 - **Environments, like Postman**: named variable sets such as Local, Staging and Production. Pick one from the Environment selector next to the URL (or `Alt+E`); its values override Globals. Create, rename, duplicate and delete them in the Variables tab.
@@ -49,7 +49,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | ![Server-Sent Events arriving live](assets/screenshots/streaming.png) | ![WebSocket message log](assets/screenshots/websocket.png) |
 | **Streaming**: Server-Sent Events and NDJSON appear as they arrive | **WebSocket**: connect, send, and watch what comes back |
 | ![GraphQL schema browser](assets/screenshots/graphql-schema.png) | ![GraphQL query and variables](assets/screenshots/graphql.png) |
-| **GraphQL schema** (`F6`): pick a field and get a query for it | **GraphQL**: query and variables side by side |
+| **GraphQL schema** (`Ctrl+T`): browse the types, see a field's details, and `i` writes the query | **GraphQL**: query and variables side by side |
 
 ## Quick Start
 
@@ -201,6 +201,31 @@ term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup"
 
 The sample's **Local** environment points at the demo server (`localhost:8080`); **httpbin.org** uses the public httpbin.org instead. `-addr localhost:9090` runs the demo on another port.
 
+#### Test endpoints for each API type
+
+With `term-rest-client demo` running, these work in any workspace (no internet needed):
+
+| Type | How to set it up in the app |
+|------|-----------------------------|
+| SSE stream | GET `http://localhost:8080/sse?count=10&interval=500`. `count=0` streams until you press `Esc` |
+| NDJSON stream | GET `http://localhost:8080/ndjson?count=10&interval=300` |
+| GraphQL | POST `http://localhost:8080/graphql`, body type **GraphQL**, then `Ctrl+T` to browse the schema; select `country`, press `i`, and fill in the `code` variable (`"IN"`, `"JP"`, `"GB"` or `"BR"`) |
+| WebSocket | Method **WS**, URL `ws://localhost:8080/ws`. It sends a welcome message (showing the handshake's `Authorization` header and query string), echoes whatever you send, and closes when you send `bye` |
+| Plain HTTP | Same paths as httpbin.org: `/get`, `/post`, `/put`, `/patch`, `/delete`, `/anything`, `/json`, `/bearer`, `/basic-auth/{user}/{pass}` |
+
+With `-data demo.json`, the **API Types** collection already has one request of each kind.
+
+Public services work too, if you'd rather test against the internet:
+
+| Type | Endpoint |
+|------|----------|
+| SSE | `https://stream.wikimedia.org/v2/stream/recentchange`: Wikipedia's live edits; it never ends, so press `Esc` |
+| WebSocket | `wss://ws.postman-echo.com/raw` or `wss://echo.websocket.org`: both echo what you send |
+| GraphQL | `https://countries.trevorblades.com/graphql` or `https://rickandmortyapi.com/graphql`, then `Ctrl+T` to explore |
+| HTTP | `https://httpbin.org` (the sample's **httpbin.org** environment) |
+
+`https://httpbin.org/stream/5` sends JSON lines but labels them `application/json`, so it shows as an ordinary response rather than a live stream.
+
 ### First run
 
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
@@ -234,7 +259,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Alt+S` | Save as a new request |
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body (the variables, for GraphQL) |
-| `F6` | GraphQL: browse the schema of the URL and write a query for a field |
+| `Ctrl+T`, `F6` | GraphQL: browse the schema (types) of the URL and write a query for a field |
 | `Ctrl+G`, `F4` | Show the request as code. In that window `←`/`→` switch language, `c` copies, `v` switches between real values and `{{variables}}` |
 | `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
@@ -242,6 +267,8 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Alt+E` | Switch to the next environment (No Environment → each environment → back) |
 | `F1`, `?` | Help |
 | `Ctrl+Q`, `Ctrl+C` | Quit |
+
+**On a Mac:** the top-row keys are media keys by default (F6 turns on Do Not Disturb, F3 opens Mission Control), so `F1`-`F6` only reach the app with `fn` held down, or after turning on *System Settings → Keyboard → Keyboard Shortcuts → Function Keys → Use F1, F2, etc. keys as standard function keys*. Every F-key action also has another key: `?` for help, `e` to rename, `Ctrl+G` for code, `Ctrl+R` to send, `Ctrl+T` for the GraphQL schema. The `Alt` shortcuts (`Alt+S` save as, `Alt+E` next environment, `Alt+H` / `Alt+C` history and collections) need the Option key to act as Alt: in Terminal.app turn on *Settings → Profiles → Keyboard → Use Option as Meta key*; in iTerm2 set *Settings → Profiles → Keys → Left Option key* to *Esc+*. Without that, click the environment picker and the sidebar tabs instead.
 
 In the **Collections tree**:
 
@@ -384,7 +411,11 @@ The sample **API Types / Live events (SSE)** request follows Wikimedia's public 
 
 Choose **GraphQL** as the body type. The Body tab splits into a **Query** editor and a **Variables** editor (a JSON object), and the request is sent as `{"query": ..., "variables": ...}` with `Content-Type: application/json`. A GET request sends both in the URL instead, as GraphQL over HTTP describes. `{{variables}}` work in both editors.
 
-Press `F6` to browse the server's schema. The app sends an introspection query to the URL, with the request's headers and auth, and lists the query, mutation and subscription fields with their arguments and types. `→` shows the fields of a field's type. `Enter` on a top-level field writes a query for it, with a variable for each argument and the result's fields already selected:
+Press `Ctrl+T` (or `F6`) to browse the server's schema. The app sends an introspection query to the URL, with the request's headers and auth, and lists the query, mutation and subscription fields with their arguments and types:
+
+- **`Enter`, `Space` or a click** opens or closes a field to show its type's fields, so you can walk the whole schema (`→` / `←` work too).
+- **The Details pane** shows the selected field's description, its arguments (required ones marked), the fields of the type it returns, and the query `i` would write.
+- **`i`** writes that query into the Body tab and closes the browser. On a nested field it writes the query for the top-level field it's under, with a variable for each argument and the result's fields already selected:
 
 ```graphql
 query Country($code: ID!) {
@@ -401,7 +432,7 @@ query Country($code: ID!) {
 }
 ```
 
-Fill in the variables and send. `r` in the browser reloads the schema. Postman collections with GraphQL bodies import and export as GraphQL, and pasting a curl command whose body is a GraphQL query turns it into one. Try the sample **API Types / Country (GraphQL)**, which uses the public countries API.
+Fill in the variables and send. `r` in the browser reloads the schema, `Esc` closes it. Postman collections with GraphQL bodies import and export as GraphQL, and pasting a curl command whose body is a GraphQL query turns it into one. Try the sample **API Types / Country (GraphQL)**, which uses the public countries API.
 
 ### WebSocket
 

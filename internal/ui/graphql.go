@@ -60,8 +60,10 @@ func (a *App) browseSchema(reload bool) {
 
 // schemaRef is what a node in the schema browser stands for.
 type schemaRef struct {
-	op    string // "query", "mutation" or "subscription" for root fields
-	field graphql.Field
+	op     string // "query", "mutation" or "subscription"; empty for the root type nodes
+	parent string // the type the field belongs to
+	field  graphql.Field
+	root   *schemaRef // the top-level field this one is under (itself for top-level fields)
 }
 
 func (a *App) showSchema(url string, s *graphql.Schema) {
@@ -73,6 +75,14 @@ func (a *App) showSchema(url string, s *graphql.Schema) {
 	tree.SetBackgroundColor(t.Input)
 	tree.SetGraphicsColor(t.Border)
 
+	details := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetScrollable(true)
+	details.SetBorder(true).SetTitle(" Details ").SetTitleColor(t.Title).SetBorderColor(t.Border).SetBorderPadding(0, 0, 1, 1)
+	details.SetBackgroundColor(t.Input)
+
+	expandable := func(f graphql.Field) bool {
+		named := f.Type.Named()
+		return named != nil && s.Types[named.Name] != nil && len(s.Types[named.Name].Fields) > 0
+	}
 	fieldLabel := func(f graphql.Field) string {
 		label := fmt.Sprintf("[%s]%s", t.HexText, tview.Escape(f.Name))
 		if len(f.Args) > 0 {
@@ -83,52 +93,48 @@ func (a *App) showSchema(url string, s *graphql.Schema) {
 			label += fmt.Sprintf("[%s]([-]%s[%s])", t.HexMuted, strings.Join(args, fmt.Sprintf("[%s], ", t.HexMuted)), t.HexMuted)
 		}
 		label += fmt.Sprintf("[%s]: [%s]%s", t.HexMuted, t.HexAccent, tview.Escape(f.Type.String()))
-		if f.Description != "" {
-			label += fmt.Sprintf("  [%s]%s", t.HexMuted, tview.Escape(f.Description))
+		if expandable(f) {
+			label = "▸ " + label
+		} else {
+			label = "  " + label
 		}
 		return label
 	}
-	// addFields lists a type's fields under node; object fields expand to
-	// their own type's fields when opened.
-	var addFields func(node *tview.TreeNode, typeName, op string)
-	addFields = func(node *tview.TreeNode, typeName, op string) {
+	// addFields lists a type's fields under node. Object fields open to
+	// their own type's fields, so the whole schema can be browsed.
+	addFields := func(node *tview.TreeNode, typeName, op string, under *schemaRef) {
 		typ := s.Types[typeName]
 		if typ == nil {
 			return
 		}
 		for _, f := range typ.Fields {
-			n := tview.NewTreeNode(fieldLabel(f)).SetReference(schemaRef{op: op, field: f})
-			a.styleNode(n)
-			if named := f.Type.Named(); named != nil && s.Types[named.Name] != nil && len(s.Types[named.Name].Fields) > 0 {
-				n.SetExpanded(false)
-				n.SetText("▸ " + n.GetText())
+			ref := &schemaRef{op: op, parent: typeName, field: f, root: under}
+			if under == nil {
+				ref.root = ref
 			}
+			n := tview.NewTreeNode(fieldLabel(f)).SetReference(ref).SetExpanded(false)
+			a.styleNode(n)
 			node.AddChild(n)
 		}
 	}
 	for _, r := range s.Roots() {
 		n := tview.NewTreeNode(fmt.Sprintf("[%s::b]%s[-:-:-] [%s]%s", t.HexAccent, r[0], t.HexMuted, r[1]))
 		a.styleNode(n)
-		addFields(n, r[1], r[0])
+		addFields(n, r[1], r[0], nil)
 		root.AddChild(n)
 	}
-	if len(root.GetChildren()) == 0 {
-		root.AddChild(tview.NewTreeNode(fmt.Sprintf("[%s]The schema has no query, mutation or subscription type.", t.HexMuted)))
-	} else if first := root.GetChildren()[0].GetChildren(); len(first) > 0 {
-		tree.SetCurrentNode(first[0])
-	}
 
+	showDetails := func(n *tview.TreeNode) {
+		details.SetText(a.schemaDetails(s, n))
+		details.ScrollToBeginning()
+	}
 	toggle := func(n *tview.TreeNode) {
-		ref, ok := n.GetReference().(schemaRef)
-		if !ok {
-			return
-		}
-		named := ref.field.Type.Named()
-		if named == nil || s.Types[named.Name] == nil || len(s.Types[named.Name].Fields) == 0 {
+		ref, ok := n.GetReference().(*schemaRef)
+		if !ok || !expandable(ref.field) {
 			return
 		}
 		if len(n.GetChildren()) == 0 {
-			addFields(n, named.Name, "") // nested fields are browsed, not inserted
+			addFields(n, ref.field.Type.Named().Name, ref.op, ref.root)
 		}
 		n.SetExpanded(!n.IsExpanded())
 		text := strings.TrimPrefix(strings.TrimPrefix(n.GetText(), "▸ "), "▾ ")
@@ -138,33 +144,50 @@ func (a *App) showSchema(url string, s *graphql.Schema) {
 			n.SetText("▸ " + text)
 		}
 	}
-
-	hint := tview.NewTextView().SetDynamicColors(true)
-	hint.SetBackgroundColor(t.Input)
-	hint.SetText(fmt.Sprintf(" [%s::b]Enter[-:-:-] [%s]write a query for a top-level field   [%s::b]→ ←[-:-:-] [%s]show / hide a type's fields   [%s::b]r[-:-:-] [%s]reload   [%s::b]Esc[-:-:-] [%s]close",
-		t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted, t.HexAccent, t.HexMuted))
-
-	tree.SetSelectedFunc(func(n *tview.TreeNode) {
-		ref, ok := n.GetReference().(schemaRef)
+	insert := func(n *tview.TreeNode) {
+		ref, ok := n.GetReference().(*schemaRef)
 		if !ok {
-			return
-		}
-		if ref.op == "" {
-			toggle(n)
+			a.setStatus(levelWarning, "Pick a field to write a query for")
 			return
 		}
 		a.closeDialog()
-		a.insertQuery(s, ref)
-	})
+		a.insertQuery(s, *ref.root)
+	}
+
+	if len(root.GetChildren()) == 0 {
+		root.AddChild(tview.NewTreeNode(fmt.Sprintf("[%s]The schema has no query, mutation or subscription type.", t.HexMuted)))
+	} else if first := root.GetChildren()[0].GetChildren(); len(first) > 0 {
+		tree.SetCurrentNode(first[0])
+		showDetails(first[0])
+	}
+
+	hint := tview.NewTextView().SetDynamicColors(true)
+	hint.SetBackgroundColor(t.Input)
+	key := func(k, what string) string {
+		return fmt.Sprintf("[%s::b]%s[-:-:-] [%s]%s", t.HexAccent, k, t.HexMuted, what)
+	}
+	hint.SetText(" " + strings.Join([]string{
+		key("Enter / click", "open or close a field"),
+		key("i", "insert its query into the Body tab"),
+		key("r", "reload"),
+		key("Esc", "close"),
+	}, "   "))
+
+	tree.SetChangedFunc(showDetails)
+	tree.SetSelectedFunc(toggle) // Enter and mouse clicks
 	tree.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		n := tree.GetCurrentNode()
 		switch {
 		case ev.Key() == tcell.KeyEsc || (ev.Key() == tcell.KeyRune && ev.Rune() == 'q'):
 			a.closeDialog()
+		case ev.Key() == tcell.KeyRune && ev.Rune() == 'i' && n != nil:
+			insert(n)
+		case ev.Key() == tcell.KeyRune && ev.Rune() == ' ' && n != nil:
+			toggle(n)
 		case ev.Key() == tcell.KeyRight && n != nil && !n.IsExpanded():
 			toggle(n)
 		case ev.Key() == tcell.KeyLeft && n != nil && n.IsExpanded() && len(n.GetChildren()) > 0:
-			if _, ok := n.GetReference().(schemaRef); ok {
+			if _, ok := n.GetReference().(*schemaRef); ok {
 				toggle(n)
 			}
 		case ev.Key() == tcell.KeyRune && ev.Rune() == 'r':
@@ -176,12 +199,73 @@ func (a *App) showSchema(url string, s *graphql.Schema) {
 		return nil
 	})
 
+	panes := tview.NewFlex().
+		AddItem(tree, 0, 3, true).
+		AddItem(details, 0, 2, false)
 	box := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tree, 0, 1, true).
+		AddItem(panes, 0, 1, true).
 		AddItem(hint, 1, 0, false)
 	box.SetBackgroundColor(t.Input)
-	a.openDialog(box, 110, 28)
+	a.openDialog(box, 132, 32)
 	a.tv.SetFocus(tree)
+}
+
+// schemaDetails describes the selected node: a field's description,
+// arguments and result type with its fields, and the query that i writes.
+func (a *App) schemaDetails(s *graphql.Schema, n *tview.TreeNode) string {
+	t := a.theme
+	esc := tview.Escape
+	var sb strings.Builder
+	line := func(format string, args ...any) { fmt.Fprintf(&sb, format+"\n", args...) }
+	ref, ok := n.GetReference().(*schemaRef)
+	if !ok {
+		line("[%s]Open a field to see its arguments and type.", t.HexMuted)
+		return sb.String()
+	}
+	f := ref.field
+	line("[%s]%s.[%s::b]%s[-:-:-][%s]: [%s]%s", t.HexMuted, esc(ref.parent), t.HexText, esc(f.Name), t.HexMuted, t.HexAccent, esc(f.Type.String()))
+	if f.Description != "" {
+		line("[%s]%s", t.HexText, esc(f.Description))
+	}
+	if len(f.Args) > 0 {
+		line("")
+		line("[%s::b]Arguments", t.HexAccent)
+		for _, arg := range f.Args {
+			req := ""
+			if arg.Type != nil && arg.Type.Kind == "NON_NULL" {
+				req = fmt.Sprintf(" [%s](required)", t.HexWarning)
+			}
+			line("  [%s]%s: [%s]%s%s", t.HexText, esc(arg.Name), t.HexInfo, esc(arg.Type.String()), req)
+			if arg.Description != "" {
+				line("    [%s]%s", t.HexMuted, esc(arg.Description))
+			}
+		}
+	}
+	if named := f.Type.Named(); named != nil {
+		if typ := s.Types[named.Name]; typ != nil && len(typ.Fields) > 0 {
+			line("")
+			line("[%s::b]%s[-:-:-] [%s]fields", t.HexAccent, esc(typ.Name), t.HexMuted)
+			if typ.Description != "" {
+				line("  [%s]%s", t.HexMuted, esc(typ.Description))
+			}
+			for _, sub := range typ.Fields {
+				line("  [%s]%s[%s]: [%s]%s", t.HexText, esc(sub.Name), t.HexMuted, t.HexInfo, esc(sub.Type.String()))
+			}
+		}
+	}
+	query, variables := s.Skeleton(ref.root.op, ref.root.field)
+	line("")
+	if ref.root != ref {
+		line("[%s::b]i[-:-:-] [%s]writes the query for [%s]%s[%s]:", t.HexAccent, t.HexMuted, t.HexText, esc(ref.root.field.Name), t.HexMuted)
+	} else {
+		line("[%s::b]i[-:-:-] [%s]writes this query:", t.HexAccent, t.HexMuted)
+	}
+	sb.WriteString("[" + t.HexText + "]" + esc(strings.TrimRight(query, "\n")) + "\n")
+	if variables != "" {
+		line("[%s]Variables:", t.HexMuted)
+		sb.WriteString("[" + t.HexText + "]" + esc(variables) + "\n")
+	}
+	return sb.String()
 }
 
 // insertQuery replaces the query with a skeleton for a root field and

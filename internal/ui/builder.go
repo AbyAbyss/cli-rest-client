@@ -362,7 +362,7 @@ func (a *App) buildBodyTab() *tab {
 		a.layoutBody()
 		a.requestChanged()
 	})
-	a.bodyArea = a.newArea("Body", "{\n  \"name\": \"{{name}}\"\n}")
+	a.bodyArea = a.newArea("Body", bodyPlaceholder)
 	a.bodyArea.SetChangedFunc(func() {
 		if a.loading {
 			return
@@ -370,7 +370,7 @@ func (a *App) buildBodyTab() *tab {
 		a.req.Body = a.bodyArea.GetText()
 		a.requestChanged()
 	})
-	a.gqlVarsArea = a.newArea("Variables · JSON", "{\n  \"code\": \"{{country}}\"\n}")
+	a.gqlVarsArea = a.newArea("Variables · JSON", "Optional: a JSON object\nwith the query's variables,\nfor example:\n{\n  \"code\": \"{{country}}\"\n}")
 	a.gqlVarsArea.SetChangedFunc(func() {
 		if a.loading {
 			return
@@ -388,7 +388,7 @@ func (a *App) buildBodyTab() *tab {
 				return hintLine(t, "WebSocket: Ctrl+R connects, then sends this message", "Esc disconnects", "Tests run on the received messages when it closes")
 			}
 			if a.req.BodyType == models.BodyGraphQL {
-				return hintLine(t, "F6 browses the schema and writes a query for you", "Ctrl+P formats the variables", "GET sends the query in the URL")
+				return hintLine(t, "Ctrl+T (or F6) browses the schema and writes a query for you", "Ctrl+P formats the variables", "GET sends the query in the URL")
 			}
 			return hintLine(t, "Ctrl+P formats JSON", "Form: key=value per line", "{{var}} allowed")
 		}), 2, 0, false)
@@ -400,6 +400,9 @@ func (a *App) buildBodyTab() *tab {
 	}}
 }
 
+// bodyPlaceholder is the example in an empty JSON/text/XML/form body.
+const bodyPlaceholder = "For example:\n{\n  \"name\": \"{{name}}\"\n}"
+
 // layoutBody shows the query and variables editors side by side for
 // GraphQL, and the single body editor otherwise.
 func (a *App) layoutBody() {
@@ -407,6 +410,15 @@ func (a *App) layoutBody() {
 		return
 	}
 	focused := a.tv.GetFocus()
+	// The example text shown in an empty editor matches what goes there.
+	switch {
+	case a.req.Type == models.TypeWebSocket:
+		a.bodyArea.SetPlaceholder("Message to send when connected, for example:\n{\n  \"type\": \"subscribe\",\n  \"channel\": \"{{channel}}\"\n}")
+	case a.req.BodyType == models.BodyGraphQL:
+		a.bodyArea.SetPlaceholder("Type a GraphQL query here, or press Ctrl+T to pick a\nfield from the schema and have the query written for you.\n\nFor example:\nquery {\n  countries {\n    code\n    name\n  }\n}")
+	default:
+		a.bodyArea.SetPlaceholder(bodyPlaceholder)
+	}
 	a.bodyEditors.Clear()
 	a.bodyEditors.AddItem(a.bodyArea, 0, 3, false)
 	if a.req.BodyType == models.BodyGraphQL {

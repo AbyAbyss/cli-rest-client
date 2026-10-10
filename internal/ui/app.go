@@ -362,7 +362,7 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case key == tcell.KeyCtrlN:
 		a.newRequest()
 		return nil
-	case key == tcell.KeyF6:
+	case key == tcell.KeyF6 || key == tcell.KeyCtrlT: // Ctrl+T: Macs use F6 for Do Not Disturb
 		a.browseSchema(false)
 		return nil
 	case key == tcell.KeyCtrlG || key == tcell.KeyF4:
