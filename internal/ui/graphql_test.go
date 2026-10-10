@@ -98,3 +98,52 @@ func TestGraphQLSchemaErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestGraphQLEditorsAreTypable(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	h := start(t, nil)
+	r := models.NewRequest("Typed")
+	r.URL = srv.URL + "/graphql"
+	h.do(func() {
+		h.a.loadIntoBuilder(r, nil)
+		h.a.switchTab(3)
+		h.a.bodyType.SetCurrentOption(indexOf(models.BodyTypes, models.BodyGraphQL))
+	})
+	// The empty editors show GraphQL examples, not a JSON body.
+	if s := h.screenText(); !strings.Contains(s, "Type a GraphQL query") || !strings.Contains(s, "Optional: a JSON") {
+		t.Fatalf("examples:\n%s", s)
+	}
+
+	// Sending with an empty query explains what to do, with the environment.
+	h.do(func() { h.a.tv.SetFocus(h.a.urlInput) })
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.do(func() {
+		res := h.a.result
+		if res == nil || res.err == nil || !strings.Contains(res.err.Error(), "press F6") || res.env != "httpbin.org" {
+			t.Fatalf("empty query: %+v", res)
+		}
+	})
+
+	// Both editors take typing; Tab moves from the query to the variables.
+	h.do(func() { h.a.tv.SetFocus(h.a.bodyArea) })
+	h.typeText(`query($code: ID!) { country(code: $code) { capital } }`)
+	h.key(tcell.KeyTab, 0, 0)
+	h.do(func() {
+		if h.a.tv.GetFocus() != h.a.gqlVarsArea {
+			t.Fatalf("Tab should reach the variables editor, focus is %T", h.a.tv.GetFocus())
+		}
+	})
+	h.typeText(`{"code":"JP"}`)
+	h.do(func() {
+		if !strings.HasPrefix(h.a.req.Body, "query($code: ID!)") || h.a.req.GraphQLVariables != `{"code":"JP"}` {
+			t.Fatalf("typed: %q %q", h.a.req.Body, h.a.req.GraphQLVariables)
+		}
+		h.a.tv.SetFocus(h.a.urlInput)
+	})
+	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
+	h.eventually("answer", func() bool {
+		res := h.a.result
+		return !h.a.sending && res != nil && res.resp != nil && strings.Contains(string(res.resp.Body), `"capital":"Tokyo"`)
+	})
+}

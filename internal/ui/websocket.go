@@ -58,7 +58,7 @@ func (a *App) wsSend() {
 		assignments, errs := script.RunPre(req.PreRequest, variables)
 		a.applyAssignments(assignments)
 		if len(errs) > 0 {
-			a.result = &sendResult{method: "WS", url: req.URL, err: fmt.Errorf("pre-request script: %v", errs[0])}
+			a.result = &sendResult{method: "WS", url: req.URL, env: a.ws.ActiveEnvironment, err: fmt.Errorf("pre-request script: %v", errs[0])}
 			a.renderResponse()
 			a.setStatus(levelError, "Pre-request script failed")
 			return
@@ -66,7 +66,7 @@ func (a *App) wsSend() {
 	}
 	p, err := engine.Prepare(req, variables)
 	if err != nil {
-		a.result = &sendResult{method: "WS", url: req.URL, err: err}
+		a.result = &sendResult{method: "WS", url: req.URL, env: a.ws.ActiveEnvironment, err: err}
 		a.renderResponse()
 		a.setStatus(levelError, err.Error())
 		return

@@ -221,7 +221,7 @@ func (a *App) send() {
 			for i, e := range errs {
 				msgs[i] = e.Error()
 			}
-			a.result = &sendResult{method: req.Method, url: req.URL, err: fmt.Errorf("pre-request script: %s", strings.Join(msgs, "; "))}
+			a.result = &sendResult{method: req.Method, url: req.URL, env: a.ws.ActiveEnvironment, err: fmt.Errorf("pre-request script: %s", strings.Join(msgs, "; "))}
 			a.renderResponse()
 			a.setStatus(levelError, "Pre-request script failed")
 			return
@@ -230,7 +230,10 @@ func (a *App) send() {
 
 	prepared, err := engine.Prepare(req, variables)
 	if err != nil {
-		a.result = &sendResult{method: req.Method, url: req.URL, err: err}
+		if req.BodyType == models.BodyGraphQL && strings.Contains(err.Error(), "query is empty") {
+			err = fmt.Errorf("the GraphQL query is empty: type one in the Query box of the Body tab, or press F6 to pick a field from the schema")
+		}
+		a.result = &sendResult{method: req.Method, url: req.URL, env: a.ws.ActiveEnvironment, err: err}
 		a.renderResponse()
 		a.setStatus(levelError, err.Error())
 		return
