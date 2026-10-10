@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The browser UI didn't show requests at the top level (outside any collection), such as
   the sample's Health Check.
 
+## [0.4.0] - 2026-10-10
+
 ### Added
 - `term-rest-client -gui`: a browser interface on the same workspace, embedded in the
   binary (about 370 KB). Requests run in the Go process, so there's no CORS. It has
@@ -182,7 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.4.0
 [0.3.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.1.0
