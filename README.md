@@ -201,6 +201,31 @@ term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup"
 
 The sample's **Local** environment points at the demo server (`localhost:8080`); **httpbin.org** uses the public httpbin.org instead. `-addr localhost:9090` runs the demo on another port.
 
+#### Test endpoints for each API type
+
+With `term-rest-client demo` running, these work in any workspace (no internet needed):
+
+| Type | How to set it up in the app |
+|------|-----------------------------|
+| SSE stream | GET `http://localhost:8080/sse?count=10&interval=500`. `count=0` streams until you press `Esc` |
+| NDJSON stream | GET `http://localhost:8080/ndjson?count=10&interval=300` |
+| GraphQL | POST `http://localhost:8080/graphql`, body type **GraphQL**, then `Ctrl+T` to browse the schema; select `country`, press `i`, and fill in the `code` variable (`"IN"`, `"JP"`, `"GB"` or `"BR"`) |
+| WebSocket | Method **WS**, URL `ws://localhost:8080/ws`. It sends a welcome message (showing the handshake's `Authorization` header and query string), echoes whatever you send, and closes when you send `bye` |
+| Plain HTTP | Same paths as httpbin.org: `/get`, `/post`, `/put`, `/patch`, `/delete`, `/anything`, `/json`, `/bearer`, `/basic-auth/{user}/{pass}` |
+
+With `-data demo.json`, the **API Types** collection already has one request of each kind.
+
+Public services work too, if you'd rather test against the internet:
+
+| Type | Endpoint |
+|------|----------|
+| SSE | `https://stream.wikimedia.org/v2/stream/recentchange`: Wikipedia's live edits; it never ends, so press `Esc` |
+| WebSocket | `wss://ws.postman-echo.com/raw` or `wss://echo.websocket.org`: both echo what you send |
+| GraphQL | `https://countries.trevorblades.com/graphql` or `https://rickandmortyapi.com/graphql`, then `Ctrl+T` to explore |
+| HTTP | `https://httpbin.org` (the sample's **httpbin.org** environment) |
+
+`https://httpbin.org/stream/5` sends JSON lines but labels them `application/json`, so it shows as an ordinary response rather than a live stream.
+
 ### First run
 
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
