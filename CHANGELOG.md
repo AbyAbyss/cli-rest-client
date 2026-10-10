@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Ctrl+T` opens the GraphQL schema browser. `F6` still works, but on Macs it turns on
+  Do Not Disturb unless `fn` is held. The README has a macOS section on function keys
+  and on making Option work as Alt in Terminal.app and iTerm2.
+
 ### Fixed
 - An empty GraphQL body showed a JSON example (`{"name": "{{name}}"}`) as its
   placeholder, which looked like a query that was already there. The Query and

@@ -22,8 +22,8 @@ func TestGraphQLSchemaBrowserAndSend(t *testing.T) {
 		h.a.tv.SetFocus(h.a.urlInput)
 	})
 
-	// F6 fetches the schema and lists the root fields with their types.
-	h.key(tcell.KeyF6, 0, 0)
+	// Ctrl+T (F6 elsewhere) fetches the schema and lists the root fields with their types.
+	h.key(tcell.KeyCtrlT, 0, tcell.ModCtrl)
 	h.eventually("schema dialog", func() bool { return len(h.a.dialogs) == 1 })
 	s := h.screenText()
 	for _, want := range []string{"GraphQL schema", "countries(continent: String): [Country!]!", "country(code: ID!): Country", "A country by its ISO"} {
@@ -120,7 +120,7 @@ func TestGraphQLEditorsAreTypable(t *testing.T) {
 	h.key(tcell.KeyCtrlR, 0, tcell.ModCtrl)
 	h.do(func() {
 		res := h.a.result
-		if res == nil || res.err == nil || !strings.Contains(res.err.Error(), "press F6") || res.env != "httpbin.org" {
+		if res == nil || res.err == nil || !strings.Contains(res.err.Error(), "press Ctrl+T") || res.env != "httpbin.org" {
 			t.Fatalf("empty query: %+v", res)
 		}
 	})

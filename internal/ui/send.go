@@ -231,7 +231,7 @@ func (a *App) send() {
 	prepared, err := engine.Prepare(req, variables)
 	if err != nil {
 		if req.BodyType == models.BodyGraphQL && strings.Contains(err.Error(), "query is empty") {
-			err = fmt.Errorf("the GraphQL query is empty: type one in the Query box of the Body tab, or press F6 to pick a field from the schema")
+			err = fmt.Errorf("the GraphQL query is empty: type one in the Query box of the Body tab, or press Ctrl+T (F6) to pick a field from the schema")
 		}
 		a.result = &sendResult{method: req.Method, url: req.URL, env: a.ws.ActiveEnvironment, err: err}
 		a.renderResponse()
