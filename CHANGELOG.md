@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Copy from the response pane: `c` copies the body; `y` opens a menu with the body raw or
+  as pretty JSON, response and request headers as text or JSON, the full response (like
+  `curl -i`), and stream events or WebSocket messages as JSON.
 - `Ctrl+T` opens the GraphQL schema browser. `F6` still works, but on Macs it turns on
   Do Not Disturb unless `fn` is held. The README has a macOS section on function keys
   and on making Option work as Alt in Terminal.app and iTerm2.

@@ -314,7 +314,12 @@ The tree works like Postman's sidebar:
 - **Save As** (`Alt+S`, or `Ctrl+S` on a new request) lets you pick any collection or folder, the top level, or a new collection.
 - A folder moved to the top level with `m` becomes a collection, and a collection moved into another one becomes a folder.
 
-In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file.
+In the **Response** pane: arrow keys, `PgUp`/`PgDn` and `g`/`G` scroll, `s` saves the body to a file, `c` copies the body, and `y` opens a copy menu:
+
+- the body as received, or as pretty-printed JSON;
+- response or request headers, as `Name: value` lines or as a JSON object;
+- the full response (status line, headers and body, like `curl -i`);
+- stream events, or WebSocket messages, as JSON.
 
 ### Importing from cURL
 

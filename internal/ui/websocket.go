@@ -267,7 +267,7 @@ func (a *App) renderWebSocket(res *sendResult, line func(string, ...any), sectio
 			line("  [%s]Subprotocol: [%s]%s", t.HexMuted, t.HexText, tview.Escape(s.handshake.Protocol))
 		}
 	}
-	if section(secBody, "Messages", fmt.Sprintf("[%s](%d)", t.HexMuted, len(s.messages))) {
+	if section(secBody, "Messages", fmt.Sprintf("[%s](%d)  · y copy", t.HexMuted, len(s.messages))) {
 		if len(s.messages) == 0 {
 			line("  [%s]No messages yet.", t.HexMuted)
 		}
