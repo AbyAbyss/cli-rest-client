@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- For a WebSocket request the Body tab is now called Message and drops the HTTP body
+  type picker (JSON, Form, ...), which never applied to messages. A note says the text
+  is sent as is when the connection opens, and the example shows plain text or JSON.
+
+## [0.4.0] - 2026-10-10
+
 ### Added
 - `term-rest-client -gui`: a browser interface on the same workspace, embedded in the
   binary (about 370 KB). Requests run in the Go process, so there's no CORS. It has
@@ -25,9 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and on making Option work as Alt in Terminal.app and iTerm2.
 
 ### Changed
-- For a WebSocket request the Body tab is now called Message and drops the HTTP body
-  type picker (JSON, Form, ...), which never applied to messages. A note says the text
-  is sent as is when the connection opens, and the example shows plain text or JSON.
 - The GraphQL schema browser has a Details pane (description, arguments, the result
   type's fields, and the query it would write). `Enter`, `Space` and clicks now open and
   close fields instead of replacing the query, and `i` inserts the query, also from
@@ -164,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.4.0
 [0.3.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.1.0
