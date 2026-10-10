@@ -224,6 +224,8 @@ func (a *App) treeKeys(ev *tcell.EventKey) *tcell.EventKey {
 			a.importPostman()
 		case 'x':
 			a.exportSelected()
+		case 'l':
+			a.loadSelected()
 		case 'y':
 			if _, r := a.selection(); r != nil {
 				a.copyCode(*r)

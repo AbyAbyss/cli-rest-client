@@ -72,6 +72,7 @@ func Handler() http.Handler {
 	addStreams(mux)
 	addGraphQL(mux)
 	addWebSocket(mux)
+	addLoad(mux)
 	return mux
 }
 

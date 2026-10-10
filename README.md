@@ -29,6 +29,7 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
 - **Browser interface**: `term-rest-client -gui` opens the same workspace in your browser, with tabs, a collections tree, live streams, WebSockets, a GraphQL schema browser, a JSON tree, history and a command palette (`Ctrl+K`). Requests still run in the term-rest-client process, so there's no CORS, and it's all inside the one binary.
+- **Load testing**: `term-rest-client load` (or `Alt+L` in the app, or the browser's Load test dialog) runs a request or a whole folder under load. Use virtual users, a fixed request rate, or ramping stages (`30s:50,1m:50,30s:0`). You get live charts, p50/p95/p99 latency, error rates, your tests as checks, and thresholds like `p95<300ms` that fail CI.
 - **Headless mode**: `term-rest-client run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
 
 ## Screenshots
@@ -56,6 +57,8 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **Streaming**: Server-Sent Events and NDJSON appear as they arrive | **WebSocket**: connect, send, and watch what comes back |
 | ![GraphQL schema browser](assets/screenshots/graphql-schema.png) | ![GraphQL query and variables](assets/screenshots/graphql.png) |
 | **GraphQL schema** (`Ctrl+T`): browse the types, see a field's details, and `i` writes the query | **GraphQL**: query and variables side by side |
+| ![Load test results in the browser](assets/screenshots/gui-load.png) | ![Load test results in the terminal](assets/screenshots/loadtest.png) |
+| **Load test in the browser**: thresholds, requests/s with virtual users, and p50/p95/p99 over time | **Load test in the terminal** (`Alt+L`): the same results, here with a failed `errors<1%` threshold |
 
 ## Quick Start
 
@@ -305,6 +308,7 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | `Ctrl+N` | New empty request |
 | `Ctrl+P` | Pretty-print the JSON body (the variables, for GraphQL) |
 | `Ctrl+T`, `F6` | GraphQL: browse the schema (types) of the URL and write a query for a field |
+| `Alt+L`, `F7` | Load test the request (see [Load testing](#load-testing)) |
 | `Ctrl+G`, `F4` | Show the request as code. In that window `←`/`→` switch language, `c` copies, `v` switches between real values and `{{variables}}` |
 | `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
@@ -325,6 +329,7 @@ In the **Collections tree**:
 | `f` | New folder inside the selected collection or folder (or the folder of the selected request) |
 | `a` (or `r`) | New request in the selected collection or folder. With nothing selected it goes to the top level |
 | `m` | Move the selected request or folder to another collection, folder, or the top level |
+| `l` | Load test the selected request, or every request in the selected folder, in order |
 | `i` | Import cURL or a Postman file (same as `Ctrl+O`) |
 | `x` | Export the selected collection or folder as a Postman collection |
 | `y` | Copy the selected request to the clipboard as code (curl until you pick another language in `Ctrl+G`) |
@@ -548,6 +553,53 @@ What goes into the file:
 
 Exporting and importing again gives back the same requests; the test suite checks this round trip, and checks that the generated Postman tests pass or fail exactly like the originals.
 
+### Load testing
+
+Run a saved request, or every request in a folder in order, under load:
+
+```bash
+term-rest-client load -vus 20 -duration 1m "Shop API/Checkout"               # 20 virtual users for a minute
+term-rest-client load -stages 30s:50,1m:50,30s:0 "Shop API"                  # ramp up to 50, hold, ramp down
+term-rest-client load -stages 10s:5,10s:100,30s:100,10s:5 "Shop API/Search"  # a spike
+term-rest-client load -rate 200/s -duration 1m "Shop API/Search"             # 200 iterations a second, however slow it gets
+term-rest-client load -vus 10 -duration 30s -threshold "p95<300ms,errors<1%" -out results.json "Shop API"
+```
+
+In the terminal app, `Alt+L` (or `F7`) load tests the open request, and `l` in the Collections tree load tests the selected request or folder. In the browser UI, use **Load test…** in a request's or folder's menu, or the command palette.
+
+How it works:
+
+- **Virtual users.** Each one runs the selected requests in order, over and over, with its own copy of the variables. A token captured by `set token = json.token` at login is used by that user's later requests, as in a real session. Pre-request scripts run for every request. `-think 500ms` adds a pause after each iteration.
+- **Load shapes.**
+  - `-vus N -duration D` holds a constant number of users.
+  - `-stages` moves linearly from one target to the next, starting from 0. `30s:50,1m:50,30s:0` ramps up for 30 seconds, holds for a minute and ramps down.
+  - Add `/s` to every stage target (`30s:100/s,1m:100/s`) to ramp a request rate instead of users.
+- **Fixed rate.** `-rate 200/s` starts iterations on schedule, so a slow server shows up as higher latency instead of quietly lowering the load. The number of iterations in flight at once is capped by `-max-vus` (default: twice the peak rate, at least 100). Arrivals beyond it are dropped and reported, which means the server can't keep up at that rate.
+- **What you get.**
+  - Requests and requests per second.
+  - Failed requests: no response, or a 4xx/5xx status.
+  - Latency min, average, p50, p90, p95, p99 and max, overall and per request. Percentiles are accurate to about 3% and use fixed memory however long the test runs.
+  - Status codes, error reasons, bytes sent and received.
+  - A per-second timeline.
+  - Every test line as a check with its pass rate.
+- **Thresholds.** `-threshold` (repeatable, or comma-separated) takes `p95<300ms`, `p(99.9)<1s`, `avg<200ms`, `med<100ms`, `max<2s`, `errors<1%`, `checks>99%` or `rps>100`. If any fails, `load` exits with status 1, so it can gate a CI pipeline.
+- **Results.** The terminal prints a summary like `run` does. `-out results.json` saves the summary and the per-second timeline (times in milliseconds); `-out results.csv` saves the timeline. The browser UI offers the same downloads.
+- **Stopping.** `Ctrl+C` (or `Esc`, or **Stop**) stops starting new iterations. Requests in flight get up to 10 seconds to finish (or the timeout setting, if that's shorter). Anything still running after that is counted as interrupted, not failed.
+
+Only load test servers you own or are allowed to test. Before sending load to a host that isn't this machine or a private network address, term-rest-client asks first. Without a terminal to ask in (CI), it needs `-yes`.
+
+The demo server has endpoints for trying this out:
+- `/slow?ms=80&jitter=40` answers after 80 ms ± 40 ms.
+- `/flaky?fail=5` fails 5% of the time with a 500.
+- `/status/503` answers with any status.
+
+```bash
+term-rest-client demo &
+term-rest-client -data demo.json load -env Local -stages 10s:20,20s:20,5s:0 -threshold "p95<200ms" "Auth API"
+```
+
+Load tests send HTTP requests; WebSocket requests in a folder are skipped. Streaming responses (SSE) are read until the server closes them or the timeout ends them, so they make poor load test targets.
+
 ### History
 
 Every request you send is recorded, like Postman's History tab. Switch the sidebar with `Alt+H` (History) and `Alt+C` (Collections), `F3` to flip between them, or click the tabs above the sidebar.
@@ -672,6 +724,7 @@ term-rest-client run -env Local "User Service"          # use a different enviro
 term-rest-client env                                    # list environments (* marks the active one)
 term-rest-client env Staging                            # switch the active environment ("none" or "global" for Globals only)
 term-rest-client demo                                   # local demo server for the sample workspace's Local environment
+term-rest-client load -vus 20 -duration 1m "Shop API"   # load test with 20 virtual users (see Load testing)
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
 term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)

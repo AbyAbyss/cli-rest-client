@@ -215,7 +215,8 @@ function vars() {
   return m;
 }
 
-// walk visits every request: fn(req, trail) where trail is [collection, folder...].
+// walk visits every request: fn(req, trail) where trail is [collection,
+// folder...], empty for requests at the top level (outside any collection).
 function walk(fn) {
   const rec = (c, trail) => {
     const t = trail.concat([c]);
@@ -223,6 +224,13 @@ function walk(fn) {
     (c.folders || []).forEach((f) => rec(f, t));
   };
   (S.ws.collections || []).forEach((c) => rec(c, []));
+  (S.ws.requests || []).forEach((r) => fn(r, []));
+}
+// topLevel is the workspace's own request list, shaped like a container so
+// the request menu can rename, duplicate and delete in it.
+function topLevel() {
+  S.ws.requests = S.ws.requests || [];
+  return { name: "", requests: S.ws.requests, top: true };
 }
 function trailOf(req) { let found = null; walk((r, t) => { if (r === req) found = t; }); return found; }
 function sourceOf(tab) {
@@ -237,10 +245,12 @@ function pathOf(req) {
     (c.folders || []).forEach((f, i) => rec(f, p.concat(["f" + i])));
   };
   (S.ws.collections || []).forEach((c, i) => rec(c, ["c" + i]));
+  (S.ws.requests || []).forEach((r, i) => { if (r === req) out = ["t" + i]; });
   return out;
 }
 function byPath(p) {
   if (!p) return null;
+  if (p[0][0] === "t") return (S.ws.requests || [])[+p[0].slice(1)] || null;
   let c = (S.ws.collections || [])[+p[0].slice(1)];
   for (const s of p.slice(1, -1)) c = c && (c.folders || [])[+s.slice(1)];
   return c && (c.requests || [])[+p[p.length - 1].slice(1)] || null;
@@ -483,6 +493,7 @@ function containers() {
     (c.folders || []).forEach((f) => rec(f, t));
   };
   (S.ws.collections || []).forEach((c) => rec(c, []));
+  out.push({ c: topLevel(), label: "Top level (outside any collection)" });
   return out;
 }
 function saveAs(tab) {
@@ -577,7 +588,15 @@ function renderTree() {
   };
   const cols = S.ws.collections || [];
   cols.forEach((c) => { const n = rec(c, 0, cols, true); if (n) tree.append(n); });
-  if (!cols.length) {
+  const top = topLevel();
+  top.requests.forEach((r) => {
+    if (!match(r)) return;
+    tree.append(h("div", {
+      class: "node" + (tab && tab.origin === r ? " sel" : ""), style: { paddingLeft: "6px" }, title: r.url,
+      onclick: () => openTab(r, r), oncontextmenu: (e) => { e.preventDefault(); requestMenu(e, r, top); }, ondblclick: () => renameRequest(r),
+    }, h("span", { class: "method m-" + label(r) }, label(r)), h("span", { class: "name" }, r.name), moreBtn((b) => requestMenu(b, r, top))));
+  });
+  if (!cols.length && !top.requests.length) {
     tree.append(h("div", { class: "empty-side" }, h("div", null, "No collections yet."), h("div", null, "Save a request, or import from cURL or Postman."),
       btn("Import", { icon: "download", onclick: importDialog })));
   } else if (q && !tree.children.length) tree.append(h("div", { class: "empty-side" }, "Nothing matches \"" + S.filter + "\"."));
@@ -599,6 +618,7 @@ function containerMenu(anchor, c, parentList, isColl) {
       persist(true); renderTree();
     } },
     { label: "Run all requests", icon: "play", run: () => runFolder(c) },
+    { label: "Load test…", icon: "zap", run: () => loadDialog(c, c.name) },
     "-",
     { label: "Rename", icon: "edit", run: async () => {
       const n = await ask("Rename " + (isColl ? "collection" : "folder"), { value: c.name });
@@ -629,6 +649,7 @@ function requestMenu(anchor, r, c) {
       persist(true); renderTree(); openTab(d, d);
     } },
     { label: "Copy as cURL", icon: "copy", run: () => copyCode(r, "curl") },
+    { label: "Load test…", icon: "zap", run: () => loadDialog(r, r.name) },
     "-",
     { label: "Delete", icon: "trash", danger: true, run: async () => {
       if (!(await confirmBox("Delete \"" + r.name + "\"?", "This can't be undone."))) return;
@@ -863,6 +884,7 @@ function renderRequest() {
       { label: "Save as…", icon: "save", run: () => saveAs(tab) },
       { label: "Duplicate into a new tab", icon: "dup", run: () => { const t = openTab(Object.assign(clone(r), { name: r.name + " (copy)" })); t.origin = null; renderAll(); } },
       { label: "Copy as cURL", icon: "copy", run: () => copyCode(r, "curl") },
+      { label: "Load test…", icon: "zap", run: () => loadDialog(tab, r.name || "Request") },
       tab.origin ? { label: "Revert to saved", icon: "clock", run: () => { tab.req = normReq(clone(tab.origin)); renderAll(); } } : null,
     ].filter(Boolean), { alignRight: true }); return b; })());
 
@@ -1808,6 +1830,387 @@ async function runFolder(c) {
   renderSidebar(); renderEnvPick();
 }
 
+// ---------- load testing ----------
+
+const LOAD_PRESETS = [
+  ["Ramp up, hold, down", "30s:20,1m:20,30s:0"],
+  ["Spike", "10s:5,10s:100,30s:100,10s:5,10s:0"],
+  ["Step up", "30s:10,30s:20,30s:40,30s:80"],
+  ["Soak", "1m:20,10m:20,1m:0"],
+];
+function parseDurMs(s) {
+  s = String(s || "").trim();
+  if (!s) return NaN;
+  let total = 0, rest = s;
+  const re = /^(\d+(?:\.\d+)?)(ms|s|m|h)/;
+  while (rest) {
+    const m = re.exec(rest);
+    if (!m) return NaN;
+    total += +m[1] * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]];
+    rest = rest.slice(m[0].length);
+  }
+  return total;
+}
+// planOf mirrors load.Form.Parse closely enough to draw a preview.
+function planOf(f) {
+  if ((f.stages || "").trim()) {
+    const stages = [];
+    let rate = null;
+    for (const part of f.stages.split(",").map((x) => x.trim()).filter(Boolean)) {
+      const [d, t] = part.split(":");
+      const ms = parseDurMs(d);
+      if (!t || isNaN(ms)) return null;
+      const r = t.trim().endsWith("/s");
+      if (rate === null) rate = r; else if (rate !== r) return null;
+      const v = parseFloat(t);
+      if (isNaN(v)) return null;
+      stages.push([ms, v]);
+    }
+    return stages.length ? { rate: !!rate, start: 0, stages } : null;
+  }
+  const ms = parseDurMs(f.duration);
+  const v = parseFloat(f.load);
+  if (isNaN(ms) || isNaN(v) || v <= 0) return null;
+  return { rate: /\//.test(f.load), start: v, stages: [[ms, v]] };
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function fitCanvas(cv) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * dpr));
+  cv.height = Math.max(1, Math.round(r.height * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+function drawPlan(cv, plan) {
+  const { ctx, w, h } = fitCanvas(cv);
+  ctx.clearRect(0, 0, w, h);
+  if (!plan) { ctx.fillStyle = cssVar("--dim"); ctx.font = "12px " + cssVar("--font"); ctx.fillText("Type stages like 30s:20,1m:20,30s:0", 12, h / 2 + 4); return; }
+  const total = plan.stages.reduce((a, s) => a + s[0], 0) || 1;
+  const peak = Math.max(plan.start, ...plan.stages.map((s) => s[1])) || 1;
+  const pad = { l: 8, r: 8, t: 14, b: 16 };
+  const X = (t) => pad.l + (t / total) * (w - pad.l - pad.r);
+  const Y = (v) => h - pad.b - (v / peak) * (h - pad.t - pad.b);
+  const pts = [[0, plan.start]];
+  let t = 0;
+  for (const [d, v] of plan.stages) { t += d; pts.push([t, v]); }
+  const grad = ctx.createLinearGradient(0, pad.t, 0, h);
+  grad.addColorStop(0, cssVar("--accent-bg"));
+  grad.addColorStop(1, "transparent");
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(0));
+  pts.forEach(([x, y]) => ctx.lineTo(X(x), Y(y)));
+  ctx.lineTo(X(total), Y(0));
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))));
+  ctx.strokeStyle = cssVar("--accent");
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.fillStyle = cssVar("--dim");
+  ctx.font = "11px " + cssVar("--mono");
+  ctx.fillText(peak + (plan.rate ? "/s" : " users"), pad.l + 2, pad.t - 3);
+  const secs = total / 1000;
+  const label = secs >= 60 ? Math.floor(secs / 60) + "m" + (secs % 60 ? Math.round(secs % 60) + "s" : "") : secs + "s";
+  ctx.textAlign = "right";
+  ctx.fillText(label, w - pad.r, h - 3);
+}
+// drawSeries draws lines over seconds; series on the "right" axis get their
+// own scale (virtual users under requests/s).
+function drawSeries(cv, series, fmtLeft, fmtRight) {
+  const { ctx, w, h } = fitCanvas(cv);
+  ctx.clearRect(0, 0, w, h);
+  const n = Math.max(2, ...series.map((s) => s.values.length));
+  const pad = { l: 48, r: fmtRight ? 40 : 10, t: 8, b: 18 };
+  const max = (axis) => Math.max(1e-9, ...series.filter((s) => (s.axis || "left") === axis).flatMap((s) => s.values)) * 1.15;
+  const maxL = max("left"), maxR = max("right");
+  const X = (i) => pad.l + (i / (n - 1)) * (w - pad.l - pad.r);
+  const Y = (v, axis) => h - pad.b - (v / (axis === "right" ? maxR : maxL)) * (h - pad.t - pad.b);
+  ctx.font = "11px " + cssVar("--mono");
+  ctx.strokeStyle = cssVar("--border");
+  ctx.fillStyle = cssVar("--dim");
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 3; g++) {
+    const y = pad.t + (g / 3) * (h - pad.t - pad.b);
+    ctx.beginPath(); ctx.moveTo(pad.l, Math.round(y) + 0.5); ctx.lineTo(w - pad.r, Math.round(y) + 0.5); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillText(fmtLeft(maxL * (1 - g / 3)), pad.l - 6, y + 4);
+    if (fmtRight) { ctx.textAlign = "left"; ctx.fillText(fmtRight(maxR * (1 - g / 3)), w - pad.r + 6, y + 4); }
+  }
+  ctx.textAlign = "center";
+  const step = Math.max(1, Math.ceil(n / 8));
+  for (let i = 0; i < n; i += step) ctx.fillText(i + 1 + "s", X(i), h - 3);
+  for (const s of series) {
+    const axis = s.axis || "left";
+    if (!s.values.length) continue;
+    if (s.fill) {
+      const grad = ctx.createLinearGradient(0, pad.t, 0, h - pad.b);
+      grad.addColorStop(0, s.fill);
+      grad.addColorStop(1, "transparent");
+      ctx.beginPath();
+      ctx.moveTo(X(0), Y(0, axis));
+      s.values.forEach((v, i) => ctx.lineTo(X(i), Y(v, axis)));
+      ctx.lineTo(X(s.values.length - 1), Y(0, axis));
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+    ctx.beginPath();
+    s.values.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v, axis)) : ctx.moveTo(X(i), Y(v, axis))));
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width || 2;
+    ctx.setLineDash(s.dash || []);
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+const fmtMs = (v) => (v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "s" : v >= 10 ? Math.round(v) + "ms" : v.toFixed(1) + "ms");
+const fmtNum = (v) => (v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v.toFixed(1));
+const fmtPct = (r) => (r === 0 ? "0%" : r < 0.001 ? (r * 100).toFixed(3) + "%" : (r * 100).toFixed(2) + "%");
+const group3 = (n) => Math.round(n).toLocaleString("en-US");
+
+function loadStepsFor(target) {
+  // target: a tab, a saved request, or a collection/folder.
+  const steps = [];
+  const path = (r) => { const t = trailOf(r); return t ? t.map((c) => c.name).concat([r.name]).join("/") : r.name; };
+  if (target.req) {
+    steps.push({ name: target.origin ? path(target.origin) : target.req.name || "Request", request: target.req });
+  } else if (target.method !== undefined || target.url !== undefined) {
+    steps.push({ name: path(target), request: target });
+  } else {
+    const rec = (c) => { (c.requests || []).forEach((r) => steps.push({ name: path(r), request: r })); (c.folders || []).forEach(rec); };
+    rec(target);
+  }
+  return steps.filter((s) => s.request.type !== "websocket");
+}
+
+function loadDialog(target, title) {
+  const steps = loadStepsFor(target);
+  if (!steps.length) return toast("warn", "Nothing to load test", "Load tests send HTTP requests; WebSocket isn't supported yet.");
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("trc.load") || "{}"); } catch (e) { /* ignore */ }
+  const st = Object.assign({ mode: "vus", users: "10", rate: "50", duration: "30s", stages: LOAD_PRESETS[0][1], think: "", thresholds: "" }, saved);
+  const body = h("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+  const footer = h("div", { class: "row", style: { width: "100%" } });
+  const d = dialog({
+    title: "Load test", sub: title + (steps.length > 1 ? ` · ${steps.length} requests per iteration` : ""), wide: true, body, footer: [footer],
+    onclose: () => { if (run && run.live) stopRun(); },
+  });
+  let run = null;
+
+  const form = () => ({
+    load: st.mode === "rate" ? st.rate + "/s" : st.users,
+    duration: st.duration, stages: st.mode === "stages" ? st.stages : "", think: st.think, thresholds: st.thresholds,
+  });
+  const remember = () => { try { localStorage.setItem("trc.load", JSON.stringify(st)); } catch (e) { /* ignore */ } };
+
+  function showSetup() {
+    body.replaceChildren();
+    const preview = h("canvas", { class: "lt-preview" });
+    const redraw = () => requestAnimationFrame(() => drawPlan(preview, planOf(form())));
+    const field = (label, key, attrs = {}) => {
+      const i = h("input", Object.assign({ class: "input mono", value: st[key], spellcheck: "false" }, attrs));
+      i.addEventListener("input", () => { st[key] = i.value; redraw(); });
+      i.addEventListener("keydown", (e) => { if (e.key === "Enter") start(false); });
+      return h("div", null, h("label", { class: "label" }, label), i);
+    };
+    const modes = h("div", { class: "lt-modes" }, [
+      ["vus", "Virtual users", "Each user sends the requests back to back"],
+      ["rate", "Request rate", "Iterations start on schedule, however slow the server gets"],
+      ["stages", "Stages", "Ramp up, hold, ramp down, or spike"],
+    ].map(([id, name, sub]) => h("div", { class: "lt-mode" + (st.mode === id ? " on" : ""), onclick: () => { st.mode = id; showSetup(); } }, h("b", null, name), h("span", null, sub))));
+    const grid = h("div", { class: "lt-grid" });
+    if (st.mode === "vus") grid.append(field("Virtual users", "users", { type: "number", min: 1 }), field("Duration", "duration", { placeholder: "30s" }));
+    if (st.mode === "rate") grid.append(field("Iterations per second", "rate", { type: "number", min: 0.1, step: "any" }), field("Duration", "duration", { placeholder: "1m" }));
+    if (st.mode === "stages") {
+      const f = field("Stages: duration:target, … (targets with /s are a rate)", "stages", { placeholder: "30s:20,1m:20,30s:0" });
+      f.classList.add("full");
+      f.append(h("div", { class: "chips" }, LOAD_PRESETS.map(([n, v]) => h("button", { class: "chip", type: "button", onclick: () => { st.stages = v; f.querySelector("input").value = v; redraw(); } }, n))));
+      grid.append(f);
+    }
+    const th = field("Pass if (optional)", "thresholds", { placeholder: "p95<300ms, errors<1%" });
+    th.append(h("div", { class: "chips" }, ["p95<500ms", "p99<1s", "errors<1%", "checks>99%"].map((c) => h("button", {
+      class: "chip", type: "button", onclick: () => {
+        const cur = st.thresholds.split(",").map((x) => x.trim()).filter(Boolean);
+        if (!cur.includes(c)) cur.push(c);
+        st.thresholds = cur.join(", ");
+        th.querySelector("input").value = st.thresholds;
+      },
+    }, c))));
+    grid.append(field("Think time (optional)", "think", { placeholder: "e.g. 500ms between iterations" }), th);
+    body.append(modes, grid, h("div", null, h("label", { class: "label" }, "Load over time"), preview),
+      h("div", { class: "help" }, `Each virtual user runs ${steps.length > 1 ? "the " + steps.length + " requests in order" : "the request"}, again and again, with its own copy of the variables, so a token captured at login stays with that user. Tests become checks. Requests run in term-rest-client, not the browser.`));
+    footer.replaceChildren(h("div", { class: "grow" }), btn("Cancel", { onclick: () => d.close() }), btn("Start", { cls: "accent", icon: "play", onclick: () => start(false) }));
+    redraw();
+    setTimeout(() => { const i = grid.querySelector("input"); if (i) i.focus(); }, 30);
+  }
+
+  function stopRun() {
+    if (!run || !run.live) return;
+    run.stopping = true;
+    api("POST", "/api/stop", { id: run.id }).catch(() => run.ctrl.abort());
+    paintLive();
+  }
+
+  async function start(confirmed) {
+    remember();
+    const id = "lt" + Math.random().toString(36).slice(2);
+    run = { id, ctrl: new AbortController(), live: true, points: [], last: null, plan: "", total: 0, rate: st.mode === "rate" || (st.mode === "stages" && /\/s/.test(st.stages)) };
+    let res;
+    try {
+      res = await fetch("/api/load", { method: "POST", headers: { "Content-Type": "application/json" }, signal: run.ctrl.signal,
+        body: JSON.stringify({ id, form: form(), steps, confirmed }) });
+    } catch (e) { run.live = false; return toast("err", "Load test failed", e.message); }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i);
+          buf = buf.slice(i + 1);
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line);
+          if (ev.kind === "error") { run.live = false; toast("err", "Can't start the load test", ev.error); return; }
+          if (ev.kind === "confirm") {
+            run.live = false;
+            const ok = await confirmBox("Load test " + ev.hosts.join(", ") + "?", "This sends " + ev.plan + ". Only load test servers you own or are allowed to test.", "Start");
+            if (ok) start(true);
+            return;
+          }
+          if (ev.kind === "start") { Object.assign(run, { plan: ev.plan, total: ev.totalMs, rate: ev.rate, env: ev.env }); showLive(); }
+          if (ev.kind === "tick") {
+            run.last = ev.progress;
+            const p = ev.progress.point;
+            if (p && p.second && (!run.points.length || run.points[run.points.length - 1].second !== p.second)) run.points.push(p);
+            paintLive();
+          }
+          if (ev.kind === "done") { run.live = false; run.summary = ev.summary; run.text = ev.text; showDone(); }
+        }
+      }
+    } catch (e) {
+      if (run.live) { run.live = false; toast("err", "Load test interrupted", e.message); }
+    }
+  }
+
+  let liveEls = null;
+  function showLive() {
+    body.replaceChildren();
+    const bar = h("div", { class: "lt-bar" }, h("i", { style: { width: "0%" } }));
+    const time = h("span", { class: "metric mono" }, "0:00");
+    const tiles = h("div", { class: "tiles" });
+    const c1 = h("canvas"), c2 = h("canvas");
+    const chart1 = h("div", { class: "chart" }, h("div", { class: "legend" }, h("span", null, h("i", { style: { background: cssVar("--accent") } }), "Requests/s"), h("span", null, h("i", { style: { background: cssVar("--info") } }), run.rate ? "Busy users" : "Virtual users"), h("span", null, h("i", { style: { background: cssVar("--err") } }), "Failed/s")), c1);
+    const chart2 = h("div", { class: "chart" }, h("div", { class: "legend" }, h("span", null, h("i", { style: { background: cssVar("--ok") } }), "p50"), h("span", null, h("i", { style: { background: cssVar("--warn") } }), "p95"), h("span", null, h("i", { style: { background: cssVar("--err") } }), "p99")), c2);
+    const status = h("div", { class: "hint" });
+    body.append(h("div", { class: "lt-head" }, h("span", { class: "live" }, h("i"), "Running"), h("span", { class: "metric" }, run.plan), run.env ? h("span", { class: "metric" }, icon("globe", "icon-svg"), " ", run.env) : null), h("div", { class: "lt-head" }, bar, time), tiles, chart1, chart2, status);
+    footer.replaceChildren(h("div", { class: "grow" }), btn("Stop", { cls: "danger", icon: "stop", onclick: stopRun }));
+    liveEls = { bar, time, tiles, c1, c2, status };
+    paintLive();
+  }
+  function tile(k, v, s, cls) { return h("div", { class: "tile" + (cls ? " " + cls : "") }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "s" }, s || " ")); }
+  function paintLive() {
+    if (!liveEls || !run || run.summary) return;
+    const p = run.last || { elapsedMs: 0, totalMs: run.total, vus: 0, target: 0, requests: 0, failed: 0, point: {} };
+    const pct = Math.min(100, (100 * p.elapsedMs) / (p.totalMs || run.total || 1));
+    liveEls.bar.firstChild.style.width = pct + "%";
+    const clk = (ms) => Math.floor(ms / 60000) + ":" + String(Math.floor(ms / 1000) % 60).padStart(2, "0");
+    liveEls.time.textContent = clk(p.elapsedMs) + " / " + clk(p.totalMs || run.total);
+    const pt = p.point || {};
+    const failed = p.requests ? p.failed / p.requests : 0;
+    liveEls.tiles.replaceChildren(
+      tile(run.rate ? "Busy users" : "Virtual users", p.vus + (run.rate ? "" : " / " + Math.round(p.target)), run.rate ? "target " + fmtNum(p.target) + "/s" : ""),
+      tile("Requests/s", group3(pt.requests || 0), group3(p.requests) + " in total"),
+      tile("p95 (last second)", pt.p95Ms ? fmtMs(pt.p95Ms) : "–", p.p95Ms ? "whole run " + fmtMs(p.p95Ms) : ""),
+      tile("Failed", fmtPct(failed), group3(p.failed) + " requests", failed > 0.01 ? "bad" : ""));
+    const pts = run.points;
+    drawSeries(liveEls.c1, [
+      { values: pts.map((x) => x.requests), color: cssVar("--accent"), fill: cssVar("--accent-bg") },
+      { values: pts.map((x) => x.vus), color: cssVar("--info"), axis: "right", dash: [4, 3], width: 1.5 },
+      { values: pts.map((x) => x.failed), color: cssVar("--err"), width: 1.5 },
+    ], fmtNum, fmtNum);
+    drawSeries(liveEls.c2, [
+      { values: pts.map((x) => x.p50Ms), color: cssVar("--ok"), width: 1.5 },
+      { values: pts.map((x) => x.p95Ms), color: cssVar("--warn") },
+      { values: pts.map((x) => x.p99Ms), color: cssVar("--err"), width: 1.5 },
+    ], fmtMs);
+    liveEls.status.textContent = run.stopping ? "Stopping: letting requests in flight finish…" : "Charts update every second. Closing this window stops the test.";
+  }
+
+  function showDone() {
+    const s = run.summary;
+    liveEls = null;
+    body.replaceChildren();
+    const okAll = (s.thresholds || []).every((t) => t.ok);
+    const checks = (s.checks || []).reduce((a, c) => [a[0] + c.passed, a[1] + c.failed], [0, 0]);
+    const checkRate = checks[0] + checks[1] ? checks[0] / (checks[0] + checks[1]) : null;
+    const failed = s.requests ? s.failed / s.requests : 0;
+    const how = s.stopped ? "Stopped after " + fmtMs(s.durationMs) : "Ran " + fmtMs(s.durationMs);
+    body.append(h("div", { class: "lt-head" },
+      s.thresholds && s.thresholds.length ? h("span", { class: "pill " + (okAll ? "s2" : "s5") }, okAll ? "Passed" : "Thresholds failed") : h("span", { class: "pill s3" }, "Done"),
+      h("span", { class: "metric" }, run.plan + " · " + how)));
+    body.append(h("div", { class: "tiles" },
+      tile("Requests", group3(s.requests), s.rps.toFixed(1) + " per second"),
+      tile("Failed", fmtPct(failed), group3(s.failed) + " (no response, or 4xx/5xx)", failed > 0 ? "bad" : "ok"),
+      tile("p95", fmtMs(s.latency.p95Ms), "p50 " + fmtMs(s.latency.p50Ms) + " · p99 " + fmtMs(s.latency.p99Ms)),
+      checkRate === null ? tile("Iterations", group3(s.iterations), s.peakVus + (s.plan.rate ? " busy users at peak" : " virtual users at peak"))
+        : tile("Checks", fmtPct(checkRate), group3(checks[1]) + " failed", checkRate < 1 ? "bad" : "ok")));
+    if ((s.thresholds || []).length) {
+      body.append(h("div", { class: "section-title" }, "Thresholds"), h("div", { class: "th-list" }, s.thresholds.map((t) => h("span", { class: "th " + (t.ok ? "ok" : "bad") }, t.ok ? "✓" : "✗", " ", t.source, h("small", null, t.actual)))));
+    }
+    if ((s.timeline || []).length > 1) {
+      const c1 = h("canvas"), c2 = h("canvas");
+      body.append(h("div", { class: "chart" }, h("div", { class: "legend" }, h("span", null, h("i", { style: { background: cssVar("--accent") } }), "Requests/s"), h("span", null, h("i", { style: { background: cssVar("--info") } }), s.plan.rate ? "Busy users" : "Virtual users"), h("span", null, h("i", { style: { background: cssVar("--err") } }), "Failed/s")), c1),
+        h("div", { class: "chart" }, h("div", { class: "legend" }, h("span", null, h("i", { style: { background: cssVar("--ok") } }), "p50"), h("span", null, h("i", { style: { background: cssVar("--warn") } }), "p95"), h("span", null, h("i", { style: { background: cssVar("--err") } }), "p99")), c2));
+      requestAnimationFrame(() => {
+        const t = s.timeline;
+        drawSeries(c1, [{ values: t.map((x) => x.requests), color: cssVar("--accent"), fill: cssVar("--accent-bg") }, { values: t.map((x) => x.vus), color: cssVar("--info"), axis: "right", dash: [4, 3], width: 1.5 }, { values: t.map((x) => x.failed), color: cssVar("--err"), width: 1.5 }], fmtNum, fmtNum);
+        drawSeries(c2, [{ values: t.map((x) => x.p50Ms), color: cssVar("--ok"), width: 1.5 }, { values: t.map((x) => x.p95Ms), color: cssVar("--warn") }, { values: t.map((x) => x.p99Ms), color: cssVar("--err"), width: 1.5 }], fmtMs);
+      });
+    }
+    const L = s.latency;
+    const rows = [["All requests", s.requests, s.failed, L]].concat(s.steps.length > 1 ? s.steps.map((x) => [x.name, x.requests, x.failed, x.latency]) : []);
+    body.append(h("div", { class: "section-title" }, "Response time"), h("table", { class: "lt-table" },
+      h("thead", null, h("tr", null, ["", "Requests", "Failed", "Min", "Avg", "p50", "p90", "p95", "p99", "Max"].map((x) => h("th", null, x)))),
+      h("tbody", null, rows.map(([n, req, f, l]) => h("tr", null, h("td", null, n), h("td", null, group3(req)), h("td", null, group3(f)),
+        ...[l.minMs, l.meanMs, l.p50Ms, l.p90Ms, l.p95Ms, l.p99Ms, l.maxMs].map((v) => h("td", null, fmtMs(v))))))));
+    const extra = h("div", { class: "row", style: { flexWrap: "wrap", gap: "8px 18px" } });
+    if ((s.statuses || []).length) extra.append(h("span", { class: "metric" }, "Status codes: ", ...s.statuses.map((c) => h("span", { class: "status-dot " + statusClass(+c.label), style: { marginLeft: "8px" } }, c.label + " × " + group3(c.n)))));
+    extra.append(h("span", { class: "metric" }, "Iterations ", h("b", null, group3(s.iterations))), h("span", { class: "metric" }, "Peak ", h("b", null, s.peakVus), s.plan.rate ? " busy users" : " users"),
+      h("span", { class: "metric" }, "Data ", h("b", null, humanBytes(s.bytesReceived)), " in, ", h("b", null, humanBytes(s.bytesSent)), " out"));
+    if (s.dropped) extra.append(h("span", { class: "metric", style: { color: "var(--warn)" } }, group3(s.dropped) + " iterations dropped (no free virtual user)"));
+    if (s.interrupted) extra.append(h("span", { class: "metric" }, group3(s.interrupted) + " cut off at the end"));
+    body.append(extra);
+    if ((s.errors || []).length) body.append(h("div", { class: "section-title" }, "Errors"), h("div", null, s.errors.slice(0, 6).map((e) => h("div", { class: "test fail", style: { padding: "5px 0" } }, h("span", { class: "mark" }, "✗"), h("span", null, e.label), h("span", { class: "msg", style: { color: "var(--muted)" } }, group3(e.n))))));
+    if ((s.checks || []).length) {
+      body.append(h("div", { class: "section-title" }, "Checks"), h("div", null, s.checks.map((c) => {
+        const tot = c.passed + c.failed;
+        return h("div", { class: "check-row" }, h("span", { style: { color: c.failed ? "var(--err)" : "var(--ok)", fontWeight: 700 } }, c.failed ? "✗" : "✓"),
+          h("code", { title: c.step + ": " + c.source }, (s.steps.length > 1 ? c.step.split("/").pop() + "  ·  " : "") + c.source),
+          h("div", { class: "pbar" }, h("i", { style: { width: (tot ? (100 * c.passed) / tot : 0) + "%" } })), h("span", { class: "metric", style: { textAlign: "right" } }, group3(c.passed) + " / " + group3(tot)));
+      })));
+    }
+    const name = (title || "load").replace(/[^\w.-]+/g, "_");
+    footer.replaceChildren(
+      btn("Copy summary", { cls: "ghost", icon: "copy", onclick: () => copy(run.text, "the summary") }),
+      btn("JSON", { cls: "ghost", icon: "download", title: "Summary and per-second timeline", onclick: () => download(name + "-load.json", JSON.stringify(s, null, 2), "application/json") }),
+      btn("CSV", { cls: "ghost", icon: "download", title: "Per-second timeline", onclick: () => download(name + "-load.csv", ["second,requests,failed,vus,target,mean_ms,p50_ms,p95_ms,p99_ms,max_ms"].concat(s.timeline.map((p) => [p.second, p.requests, p.failed, p.vus, p.target.toFixed(2), p.meanMs, p.p50Ms, p.p95Ms, p.p99Ms, p.maxMs].join(","))).join("\n") + "\n", "text/csv") }),
+      h("div", { class: "grow" }),
+      btn("Run again", { onclick: showSetup }), btn("Close", { cls: "accent", onclick: () => d.close() }));
+    if (!okAll) toast("err", "Load test thresholds failed"); else toast("ok", "Load test done", group3(s.requests) + " requests, p95 " + fmtMs(s.latency.p95Ms));
+  }
+
+  showSetup();
+}
+
 // ---------- command palette ----------
 
 function palette() {
@@ -1821,6 +2224,7 @@ function palette() {
     { label: "New collection", icon: "box", run: newCollection },
     { label: "Variables and environments", icon: "layers", run: () => envDialog() },
     { label: "Code snippet for this request", icon: "code", run: () => activeTab() && codeDialog(activeTab()) },
+    { label: "Load test this request", icon: "zap", run: () => activeTab() && loadDialog(activeTab(), activeTab().req.name || "Request") },
     { label: "Toggle light / dark", icon: "sun", run: toggleTheme },
     { label: "Toggle side-by-side / stacked", icon: "cols", run: toggleLayout },
     { label: "Settings", icon: "wand", run: settingsDialog },

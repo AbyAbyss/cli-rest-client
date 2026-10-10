@@ -54,6 +54,8 @@ func run(args []string) int {
 		fmt.Fprintf(out, "                                                export to Postman format\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] export -lang LANG [-raw] <Collection/Request>...\n")
 		fmt.Fprintf(out, "                                                print requests as code: curl, python, javascript, go, httpie\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] load [-vus N -duration D | -stages 30s:50,1m:50,30s:0 | -rate 100/s]\n")
+		fmt.Fprintf(out, "                     [-threshold p95<300ms] [-out FILE] <Collection/Request>...   load test (load -h for more)\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n")
 		fmt.Fprintf(out, "  term-rest-client demo [-addr localhost:8080]  serve the demo API that the sample's Local environment uses\n\nFlags:\n")
 		fs.PrintDefaults()
@@ -102,6 +104,10 @@ func run(args []string) int {
 			return cli.Env(os.Stdout, os.Stderr, ws, store, rest[1:])
 		case "history":
 			return cli.History(os.Stdout, os.Stderr, store, rest[1:])
+		case "load":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return cli.Load(ctx, os.Stdin, os.Stdout, os.Stderr, ws, rest[1:])
 		case "demo":
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

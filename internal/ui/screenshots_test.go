@@ -17,11 +17,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/cli"
+	"github.com/AbyAbyss/cli-rest-client/internal/load"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/internal/testutil"
@@ -170,6 +172,23 @@ func TestScreenshots(t *testing.T) {
 	writeShot(t, h, dir, "websocket", "WebSocket")
 	h.do(func() { h.a.wsDisconnect() })
 	h.eventually("closed", func() bool { return !h.a.wsSession().open() })
+
+	// 4c. Load test: live sparklines, then the summary.
+	{
+		r := models.NewRequest("Checkout")
+		r.Method, r.URL, r.Tests = "POST", "{{baseUrl}}/flaky?fail=1&ms=30&jitter=25", "status == 200\njson.ok == true"
+		plan, _ := load.ParseStages("3s:12,3s:12,2s:0")
+		th, _ := load.ParseThresholds("p95<200ms, errors<1%")
+		h.do(func() {
+			h.a.runLoad("Shop API/Checkout", load.Config{Steps: []load.Step{{Name: "Shop API/Checkout", Request: r}},
+				Plan: plan, Variables: h.a.ws.VariableMap(), Thresholds: th})
+		})
+		waitFor(t, h, "load points", 15*time.Second, func() bool { return h.a.loadRun != nil && len(h.a.loadRun.points) >= 5 })
+		writeShot(t, h, dir, "loadtest-live", "Load test")
+		waitFor(t, h, "load summary", 20*time.Second, func() bool { return h.a.loadRun != nil && h.a.loadRun.summary != nil })
+		writeShot(t, h, dir, "loadtest", "Load test results")
+		h.key(tcell.KeyEsc, 0, 0)
+	}
 
 	// 5. Help overlay.
 	h.key(tcell.KeyF1, 0, 0)
@@ -354,4 +373,19 @@ pre{margin:0;padding:8px 10px;font:14px/16px "DejaVu Sans Mono",Menlo,monospace;
 	if err := os.WriteFile(filepath.Join(dir, name+".html"), []byte(page), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// waitFor is eventually with a longer deadline, for runs that take seconds.
+func waitFor(t *testing.T, h *harness, what string, d time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		ok := false
+		h.do(func() { ok = cond() })
+		if ok {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }

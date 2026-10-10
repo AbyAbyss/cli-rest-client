@@ -76,7 +76,7 @@ type App struct {
 	bodyEditors                                                     *tview.Flex
 	bodyPage                                                        *tview.Flex // Body tab: type row, editors, hint
 	bodyTypeRow                                                     tview.Primitive
-	wsMessageNote                                                   *tview.TextView // replaces the type row for WebSocket
+	wsMessageNote                                                   *tview.TextView            // replaces the type row for WebSocket
 	schemas                                                         map[string]*graphql.Schema // fetched GraphQL schemas by URL
 	varsTarget                                                      *tview.DropDown
 	envButtons                                                      []*tview.Button
@@ -106,8 +106,10 @@ type App struct {
 	sending bool
 	cancel  context.CancelFunc
 
-	dialogs   []dialog
-	collapsed map[*models.Collection]bool
+	dialogs      []dialog
+	collapsed    map[*models.Collection]bool
+	loadSettings loadForm  // the last load test settings
+	loadRun      *loadView // the load test on screen, if any
 
 	status      string
 	statusLevel int
@@ -133,6 +135,8 @@ func New(ws *models.Workspace, store *storage.Store, info BuildInfo) *App {
 		info:      info,
 		theme:     theme,
 		collapsed: map[*models.Collection]bool{},
+
+		loadSettings: defaultLoadForm,
 
 		history:          &models.History{},
 		historyCollapsed: map[string]bool{},
@@ -368,6 +372,9 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case key == tcell.KeyF6 || key == tcell.KeyCtrlT: // Ctrl+T: Macs use F6 for Do Not Disturb
 		a.browseSchema(false)
 		return nil
+	case key == tcell.KeyF7 || (key == tcell.KeyRune && mod&tcell.ModAlt != 0 && (ev.Rune() == 'l' || ev.Rune() == 'L')):
+		a.loadCurrent()
+		return nil
 	case key == tcell.KeyCtrlG || key == tcell.KeyF4:
 		a.showCode()
 		return nil
@@ -415,6 +422,9 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 func (a *App) quit() {
 	if a.cancel != nil {
 		a.cancel()
+	}
+	if a.loadRun != nil {
+		a.loadRun.cancel()
 	}
 	a.saveDraft()
 	a.tv.Stop()
