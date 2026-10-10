@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Browser UI: the Variables dialog listed environments as
+  "[object HTMLDivElement], [object HTMLDivElement]" instead of their names, so they
+  couldn't be selected.
+
+## [0.5.0] - 2026-10-10
+
 ### Added
 - Load testing: `term-rest-client load`, `Alt+L` / `F7` and `l` in the terminal app, and a
   Load test dialog in the browser UI. Virtual users run a request, or a folder's requests
@@ -184,7 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.5.0
 [0.4.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.4.0
 [0.3.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.2.0
