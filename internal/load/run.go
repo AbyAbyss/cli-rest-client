@@ -51,8 +51,8 @@ type Config struct {
 	// the smaller of Timeout and 10 seconds.
 	GracefulStop time.Duration
 	Thresholds   []Threshold
-	// Tick is called about once a second, and once more at the end, from
-	// the runner's goroutine. It must not block for long.
+	// Tick is called about once a second, and once more at the end. Calls
+	// never overlap. It must not block for long.
 	Tick func(Progress)
 }
 
@@ -162,7 +162,8 @@ func Run(ctx context.Context, cfg Config) (*Summary, error) {
 	total := cfg.Plan.Total()
 	var wg sync.WaitGroup
 	done := make(chan struct{})
-	go r.ticker(done)
+	tickerDone := make(chan struct{})
+	go func() { r.ticker(done); close(tickerDone) }()
 	if cfg.Plan.Rate {
 		r.runRate(stopNew, hard, &wg)
 	} else {
@@ -179,6 +180,7 @@ func Run(ctx context.Context, cfg Config) (*Summary, error) {
 		<-finished
 	}
 	close(done)
+	<-tickerDone // Tick is never called twice at once
 	elapsed := time.Since(r.start)
 	r.m.closeLast(r.running(), cfg.Plan.At(elapsed))
 	s := r.m.summary(elapsed, cfg)

@@ -340,3 +340,21 @@ func TestDescribeAndLocal(t *testing.T) {
 		}
 	}
 }
+
+func TestTimelineHasNoShortTail(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	s, err := Run(context.Background(), Config{
+		Steps: steps("", req("Get", "GET", srv.URL+"/slow?ms=30", "")), Plan: Constant(4, 2*time.Second, false),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := 0
+	for _, p := range s.Timeline {
+		sum += p.Requests
+	}
+	if len(s.Timeline) != 2 || uint64(sum) != s.Requests || s.Timeline[1].VUs == 0 {
+		t.Fatalf("timeline %+v (total %d)", s.Timeline, s.Requests)
+	}
+}

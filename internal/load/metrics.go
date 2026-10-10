@@ -50,10 +50,12 @@ type metrics struct {
 	recv      uint64
 
 	// The second being filled, and the closed ones.
-	sec      Histogram
-	secCount int
-	secFail  int
-	timeline []Point
+	sec       Histogram
+	secCount  int
+	secFail   int
+	timeline  []Point
+	prevSec   Histogram // the last closed second, to fold a short tail into
+	lastClose time.Time
 
 	iterations  atomic.Uint64
 	dropped     atomic.Uint64
@@ -123,19 +125,40 @@ func (m *metrics) closeSecond(vus int, target float64) {
 		p.Mean, p.P50, p.P95, p.P99, p.Max = m.sec.Mean(), m.sec.Percentile(50), m.sec.Percentile(95), m.sec.Percentile(99), m.sec.Max()
 	}
 	m.timeline = append(m.timeline, p)
+	m.prevSec = m.sec
 	m.sec = Histogram{}
 	m.secCount, m.secFail = 0, 0
+	m.lastClose = time.Now()
 }
 
 // closeLast closes the final, partial second if anything happened in it,
 // so the timeline adds up to the totals.
+//
+// A tail shorter than half a second (requests finishing after the plan
+// ended) is folded into the previous second instead: on a chart it would
+// look like a drop that didn't happen.
 func (m *metrics) closeLast(vus int, target float64) {
 	m.mu.Lock()
-	pending := m.secCount > 0
-	m.mu.Unlock()
-	if pending {
-		m.closeSecond(vus, target)
+	if m.secCount == 0 {
+		m.mu.Unlock()
+		return
 	}
+	if n := len(m.timeline); n > 0 && time.Since(m.lastClose) < 500*time.Millisecond {
+		p := &m.timeline[n-1]
+		p.Requests += m.secCount
+		p.Failed += m.secFail
+		h := m.prevSec
+		h.Merge(&m.sec)
+		if h.Count() > 0 {
+			p.Mean, p.P50, p.P95, p.P99, p.Max = h.Mean(), h.Percentile(50), h.Percentile(95), h.Percentile(99), h.Max()
+		}
+		m.sec = Histogram{}
+		m.secCount, m.secFail = 0, 0
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
+	m.closeSecond(vus, target)
 }
 
 // Latency is a set of response time statistics.

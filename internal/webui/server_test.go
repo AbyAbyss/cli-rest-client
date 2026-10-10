@@ -443,3 +443,71 @@ func TestRunPortFallbackAndAddresses(t *testing.T) {
 		t.Fatal("bad port should fail")
 	}
 }
+
+func TestLoadAPI(t *testing.T) {
+	h := start(t)
+	step := func(url string) []map[string]any {
+		r := models.NewRequest("Get")
+		r.URL, r.Tests = url, "status == 200"
+		return []map[string]any{{"name": "API/Get", "request": r}}
+	}
+	lines := func(body any) []map[string]any {
+		b, _ := json.Marshal(body)
+		res := h.do("POST", "/api/load", string(b), nil)
+		defer res.Body.Close()
+		var out []map[string]any
+		sc := bufio.NewScanner(res.Body)
+		sc.Buffer(nil, 1<<24)
+		for sc.Scan() {
+			var m map[string]any
+			_ = json.Unmarshal(sc.Bytes(), &m)
+			out = append(out, m)
+		}
+		return out
+	}
+
+	got := lines(map[string]any{"form": map[string]string{"load": "2", "duration": "1500ms", "thresholds": "p95<5s"}, "steps": step("{{baseUrl}}/get")})
+	kinds := []string{}
+	for _, l := range got {
+		kinds = append(kinds, l["kind"].(string))
+	}
+	if len(got) < 3 || kinds[0] != "start" || kinds[1] != "tick" || kinds[len(kinds)-1] != "done" {
+		t.Fatalf("kinds %v", kinds)
+	}
+	if got[0]["plan"] != "2 virtual users for 1.5s" {
+		t.Fatalf("start %v", got[0])
+	}
+	done := got[len(got)-1]
+	sum := done["summary"].(map[string]any)
+	if sum["requests"].(float64) == 0 || sum["latency"].(map[string]any)["p95Ms"].(float64) <= 0 || !strings.Contains(done["text"].(string), "✓ p95<5s") {
+		t.Fatalf("done %v", done)
+	}
+
+	// Bad settings and WebSocket-only selections are refused.
+	if got := lines(map[string]any{"form": map[string]string{"load": "lots", "duration": "1s"}, "steps": step("{{baseUrl}}/get")}); got[0]["kind"] != "error" {
+		t.Fatalf("bad form %v", got)
+	}
+	ws := models.NewRequest("Socket")
+	ws.Type, ws.URL = models.TypeWebSocket, "ws://x"
+	if got := lines(map[string]any{"form": map[string]string{"load": "1", "duration": "1s"}, "steps": []map[string]any{{"name": "S", "request": ws}}}); got[0]["kind"] != "error" {
+		t.Fatalf("websocket %v", got)
+	}
+
+	// Another host: the page must ask first.
+	got = lines(map[string]any{"form": map[string]string{"load": "1", "duration": "1s"}, "steps": step("https://api.example.com/x")})
+	if len(got) != 1 || got[0]["kind"] != "confirm" || got[0]["hosts"].([]any)[0] != "api.example.com" {
+		t.Fatalf("confirm %v", got)
+	}
+
+	// Stop ends it early with a summary.
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		h.json("POST", "/api/stop", map[string]string{"id": "lt1"}, nil)
+	}()
+	start := time.Now()
+	got = lines(map[string]any{"id": "lt1", "form": map[string]string{"load": "2", "duration": "1m"}, "steps": step("{{baseUrl}}/get")})
+	last := got[len(got)-1]
+	if last["kind"] != "done" || last["summary"].(map[string]any)["stopped"] != true || time.Since(start) > 5*time.Second {
+		t.Fatalf("stop: %v after %v", last["kind"], time.Since(start))
+	}
+}
