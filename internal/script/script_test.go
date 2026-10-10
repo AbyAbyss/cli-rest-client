@@ -98,3 +98,32 @@ func TestNonJSONBody(t *testing.T) {
 		t.Fatalf("got %+v", res[0])
 	}
 }
+
+func TestEventSubjects(t *testing.T) {
+	resp := Response{Status: 200, Events: []string{`{"n":1,"user":{"id":"a"}}`, "plain text", `{"n":3,"done":true}`}}
+	cases := map[string]bool{
+		"events == 3":                  true,
+		"events >= 1":                  true,
+		"events > 3":                   false,
+		`event[1] == "plain text"`:     true,
+		"event[0].json.n == 1":         true,
+		"event[0].json.user.id == a":   true,
+		"event[-1].json.done == true":  true,
+		"event[-1].json.n == 3":        true,
+		"event[5] exists":              false,
+		"event[5] !exists":             true,
+		"event[0].json.missing exists": false,
+		"event[0] contains user":       true,
+	}
+	for line, want := range cases {
+		res := RunTests(line, resp, nil)
+		if len(res) != 1 || res[0].Passed != want {
+			t.Errorf("%q: got %+v, want passed=%v", line, res, want)
+		}
+	}
+	for _, bad := range []string{"event[x] exists", "event[0].foo exists", "event[1].json.a exists"} {
+		if res := RunTests(bad, resp, nil); len(res) != 1 || res[0].Passed || res[0].Message == "" {
+			t.Errorf("%q should fail with a message: %+v", bad, res)
+		}
+	}
+}

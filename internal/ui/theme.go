@@ -133,6 +133,8 @@ func (t *Theme) methodColor(method string) string {
 		return t.HexPatch
 	case "DELETE":
 		return t.HexDelete
+	case "WS":
+		return t.HexInfo
 	}
 	return t.HexOther
 }

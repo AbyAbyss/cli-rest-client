@@ -187,3 +187,50 @@ func TestSentHeadersMatchWire(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareGraphQL(t *testing.T) {
+	r := models.NewRequest("gql")
+	r.Method, r.URL, r.BodyType = "POST", "https://api.test/graphql", models.BodyGraphQL
+	r.Body = "query Country($code: ID!) {\n  country(code: $code) { name \"{{label}}\" }\n}"
+	r.GraphQLVariables = "{\n  \"code\": \"{{code}}\"\n}"
+	p, err := Prepare(r, map[string]string{"code": "IN", "label": "x<y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"query":"query Country($code: ID!) {\n  country(code: $code) { name \"x<y\" }\n}","variables":{"code":"IN"}}`
+	if string(p.Body) != want {
+		t.Fatalf("body\n got %s\nwant %s", p.Body, want)
+	}
+	if p.Request.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("content type %q", p.Request.Header.Get("Content-Type"))
+	}
+
+	// No variables: the key is left out.
+	r.GraphQLVariables = "  "
+	p, _ = Prepare(r, map[string]string{"label": "l"})
+	if strings.Contains(string(p.Body), "variables") {
+		t.Fatalf("empty variables should be omitted: %s", p.Body)
+	}
+
+	// GET puts query and variables in the URL.
+	r.Method, r.GraphQLVariables = "GET", `{"code":"IN"}`
+	p, err = Prepare(r, map[string]string{"label": "l"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := p.Request.URL.Query()
+	if len(p.Body) != 0 || !strings.HasPrefix(q.Get("query"), "query Country") || q.Get("variables") != `{"code":"IN"}` {
+		t.Fatalf("GET: %s body=%q", p.Request.URL, p.Body)
+	}
+
+	for vars, msg := range map[string]string{`[1]`: "must be a JSON object", `{"a":`: "must be a JSON object"} {
+		r.GraphQLVariables = vars
+		if _, err := Prepare(r, nil); err == nil || !strings.Contains(err.Error(), msg) {
+			t.Errorf("variables %q: %v", vars, err)
+		}
+	}
+	r.Body, r.GraphQLVariables = " ", ""
+	if _, err := Prepare(r, nil); err == nil || !strings.Contains(err.Error(), "query is empty") {
+		t.Errorf("empty query: %v", err)
+	}
+}

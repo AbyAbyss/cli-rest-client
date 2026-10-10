@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,13 +21,14 @@ import (
 	"github.com/AbyAbyss/cli-rest-client/internal/script"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 	"github.com/AbyAbyss/cli-rest-client/pkg/httpclient"
+	"github.com/AbyAbyss/cli-rest-client/pkg/wsclient"
 )
 
 // List prints every saved request as "Collection/Folder/Request" (top-level
 // requests have no prefix).
 func List(out io.Writer, ws *models.Workspace) int {
 	ws.WalkRequests(func(path []*models.Collection, r *models.Request) {
-		fmt.Fprintf(out, "%-7s %s\n", r.Method, joinPath(path, r.Name))
+		fmt.Fprintf(out, "%-7s %s\n", r.Label(), joinPath(path, r.Name))
 	})
 	return 0
 }
@@ -65,16 +67,17 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	overrides := setFlags{}
 	fs.Var(overrides, "set", "override a variable for this run (name=value, repeatable)")
 	envName := fs.String("env", "", "environment to use for this run (default: the active one; \"none\" for globals only)")
+	streamFor := fs.Duration("stream", 0, "how long to follow a streaming response (SSE, NDJSON) before stopping it (default: the timeout setting)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	activeBefore := ws.ActiveEnvironment
 	if *envName != "" {
 		defer func() { ws.ActiveEnvironment = activeBefore }()
-		if strings.EqualFold(*envName, "none") {
+		if isGlobalsOnly(*envName) {
 			ws.SetActive("")
 		} else if ws.Environment(*envName) == nil {
-			fmt.Fprintf(errOut, "run: no environment named %q (see the env command)\n", *envName)
+			fmt.Fprintf(errOut, "run: no environment named %q\n%s\n", *envName, envHint(ws))
 			return 2
 		} else {
 			ws.SetActive(*envName)
@@ -89,14 +92,21 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	for _, name := range fs.Args() {
 		found := find(ws, name)
 		if len(found) == 0 {
-			fmt.Fprintf(errOut, "run: no request or collection named %q\n", name)
+			fmt.Fprintf(errOut, "run: no request, collection or folder named %q\n%s\n", name, pathHint(ws, name))
 			return 2
 		}
 		targets = append(targets, found...)
 	}
 
+	timeout := time.Duration(ws.Settings.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	if *streamFor <= 0 {
+		*streamFor = timeout
+	}
 	client := httpclient.NewClient(httpclient.Options{
-		Timeout:            time.Duration(ws.Settings.TimeoutSeconds) * time.Second,
+		Timeout:            timeout,
 		DisableRedirects:   ws.Settings.DisableRedirects,
 		InsecureSkipVerify: ws.Settings.InsecureSkipVerify,
 	})
@@ -111,7 +121,7 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		for k, v := range overrides {
 			variables[k] = v
 		}
-		fmt.Fprintf(out, "%s %s\n", r.Method, r.Name)
+		fmt.Fprintf(out, "%s %s\n", r.Label(), r.Name)
 
 		assignments, errs := script.RunPre(r.PreRequest, variables)
 		changed = apply(ws, assignments, overrides) || changed
@@ -134,31 +144,53 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		for _, w := range p.Warnings {
 			fmt.Fprintf(out, "  warning: %s\n", w)
 		}
-		resp, err := client.Do(context.Background(), p.Request)
+		if r.Type == models.TypeWebSocket {
+			events, resp, err := runWebSocket(p, *streamFor, ws.Settings.InsecureSkipVerify, out)
+			if err != nil {
+				fmt.Fprintf(out, "  error: %v\n", err)
+				failed = true
+				continue
+			}
+			results := script.RunTests(r.Tests, script.Response{
+				Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events,
+			}, variables)
+			failed = report(out, results) || failed
+			changed = apply(ws, captures(results), overrides) || changed
+			continue
+		}
+
+		// A stream is followed until it ends or -stream runs out; then it is
+		// stopped and the tests run on what arrived.
+		ctx, cancel := context.WithTimeout(context.Background(), *streamFor)
+		resp, err := client.DoStream(ctx, p.Request, nil)
+		cancel()
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				err = fmt.Errorf("no response within %s", *streamFor)
+			}
 			fmt.Fprintf(out, "  error: %v\n", err)
 			failed = true
 			continue
 		}
-		fmt.Fprintf(out, "  %s  %d ms  %d bytes\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Body))
-
-		results := script.RunTests(r.Tests, script.Response{
-			Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration,
-		}, variables)
-		var captures []script.Assignment
-		for _, tr := range results {
-			switch {
-			case tr.Capture != nil:
-				captures = append(captures, *tr.Capture)
-				fmt.Fprintf(out, "  → %s\n", tr.Message)
-			case tr.Passed:
-				fmt.Fprintf(out, "  ✓ %s\n", tr.Source)
-			default:
-				failed = true
-				fmt.Fprintf(out, "  ✗ %s  (%s)\n", tr.Source, tr.Message)
+		if resp.Stream != "" {
+			how := "stream ended"
+			if resp.Stopped {
+				how = fmt.Sprintf("stopped after %s", *streamFor)
 			}
+			fmt.Fprintf(out, "  %s  %d ms  %d events (%s)\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Events), how)
+		} else {
+			fmt.Fprintf(out, "  %s  %d ms  %d bytes\n", resp.Status, resp.Duration.Milliseconds(), len(resp.Body))
 		}
-		changed = apply(ws, captures, overrides) || changed
+
+		events := make([]string, len(resp.Events))
+		for i, e := range resp.Events {
+			events[i] = e.Data
+		}
+		results := script.RunTests(r.Tests, script.Response{
+			Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events,
+		}, variables)
+		failed = report(out, results) || failed
+		changed = apply(ws, captures(results), overrides) || changed
 
 		if *verbose {
 			fmt.Fprintf(out, "  > %s %s\n", p.Request.Method, p.Request.URL.RequestURI())
@@ -184,6 +216,32 @@ func Run(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 		return 1
 	}
 	return 0
+}
+
+// report prints one line per test result and reports whether any failed.
+func report(out io.Writer, results []script.Result) (failed bool) {
+	for _, tr := range results {
+		switch {
+		case tr.Capture != nil:
+			fmt.Fprintf(out, "  → %s\n", tr.Message)
+		case tr.Passed:
+			fmt.Fprintf(out, "  ✓ %s\n", tr.Source)
+		default:
+			failed = true
+			fmt.Fprintf(out, "  ✗ %s  (%s)\n", tr.Source, tr.Message)
+		}
+	}
+	return failed
+}
+
+func captures(results []script.Result) []script.Assignment {
+	var out []script.Assignment
+	for _, tr := range results {
+		if tr.Capture != nil {
+			out = append(out, *tr.Capture)
+		}
+	}
+	return out
 }
 
 func printHeaders(out io.Writer, prefix string, h http.Header) {
@@ -292,10 +350,10 @@ func Env(out, errOut io.Writer, ws *models.Workspace, store *storage.Store, args
 	}
 	name := strings.Join(args, " ")
 	switch {
-	case strings.EqualFold(name, "none"):
+	case isGlobalsOnly(name):
 		ws.SetActive("")
 	case ws.Environment(name) == nil:
-		fmt.Fprintf(errOut, "env: no environment named %q\n", name)
+		fmt.Fprintf(errOut, "env: no environment named %q\n%s\n", name, strings.Replace(envHint(ws), "-env ", "env ", -1))
 		return 2
 	default:
 		ws.SetActive(name)
@@ -403,7 +461,7 @@ func Export(out, errOut io.Writer, ws *models.Workspace, args []string) int {
 	case fs.NArg() == 1:
 		c := findCollection(ws, fs.Arg(0))
 		if c == nil {
-			fmt.Fprintf(errOut, "export: no collection or folder named %q\n", fs.Arg(0))
+			fmt.Fprintf(errOut, "export: no collection or folder named %q\n%s\n", fs.Arg(0), pathHint(ws, fs.Arg(0)))
 			return 2
 		}
 		var res *postman.ExportResult
@@ -451,7 +509,7 @@ func exportCode(out, errOut io.Writer, ws *models.Workspace, lang string, names 
 	for _, n := range names {
 		found := find(ws, n)
 		if len(found) == 0 {
-			fmt.Fprintf(errOut, "export: no request, collection or folder named %q\n", n)
+			fmt.Fprintf(errOut, "export: no request, collection or folder named %q\n%s\n", n, pathHint(ws, n))
 			return 2
 		}
 		reqs = append(reqs, found...)
@@ -537,7 +595,7 @@ func Curl(in io.Reader, out, errOut io.Writer, ws *models.Workspace, store *stor
 	var parent *models.Collection
 	if into != "" {
 		if parent = findCollection(ws, into); parent == nil {
-			fmt.Fprintf(errOut, "curl: no collection or folder named %q\n", into)
+			fmt.Fprintf(errOut, "curl: no collection or folder named %q\n%s\n", into, pathHint(ws, into))
 			return 2
 		}
 	}
@@ -568,4 +626,55 @@ func Curl(in io.Reader, out, errOut io.Writer, ws *models.Workspace, store *stor
 		}
 	}
 	return 0
+}
+
+// wsQuiet is how long run waits for more WebSocket messages after the last
+// one before it disconnects.
+const wsQuiet = time.Second
+
+// runWebSocket connects, sends the request's message, and collects what
+// comes back until the server closes, limit passes, or nothing arrives for
+// wsQuiet. It returns the received messages and a response summary for the
+// tests (status 101, the last message as the body).
+func runWebSocket(p *engine.Prepared, limit time.Duration, insecure bool, out io.Writer) ([]string, *httpclient.Response, error) {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	conn, hs, err := wsclient.Dial(ctx, p.Request, wsclient.Options{Timeout: limit, InsecureSkipVerify: insecure})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer conn.Close()
+	sent := 0
+	if p.Message != "" {
+		if _, err := conn.Send(ctx, p.Message); err != nil {
+			return nil, nil, err
+		}
+		sent++
+	}
+	var events []string
+	how := ""
+	for how == "" {
+		readCtx, stop := context.WithTimeout(ctx, wsQuiet)
+		m, err := conn.Read(readCtx)
+		quiet := readCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+		stop()
+		switch {
+		case err == nil:
+			events = append(events, m.Data)
+		case quiet:
+			how = fmt.Sprintf("quiet for %s", wsQuiet)
+		case ctx.Err() != nil:
+			how = fmt.Sprintf("stopped after %s", limit)
+		default:
+			how = wsclient.Describe(err)
+		}
+	}
+	elapsed := time.Since(start)
+	fmt.Fprintf(out, "  %d Switching Protocols  %d ms  %d sent, %d received (%s)\n", hs.Status, elapsed.Milliseconds(), sent, len(events), how)
+	resp := &httpclient.Response{StatusCode: hs.Status, Headers: hs.Headers, Duration: elapsed}
+	if len(events) > 0 {
+		resp.Body = []byte(events[len(events)-1])
+	}
+	return events, resp, nil
 }

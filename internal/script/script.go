@@ -92,6 +92,9 @@ type Response struct {
 	Headers  http.Header
 	Body     []byte
 	Duration time.Duration
+	// Events are the data of streamed events (Server-Sent Events, NDJSON
+	// lines) or received WebSocket messages, oldest first.
+	Events []string
 }
 
 // Result is the outcome of one test line.
@@ -179,6 +182,10 @@ func (c *evalCtx) subject(toks []string) (value string, exists bool, rest []stri
 		return strconv.Itoa(len(c.resp.Body)), true, toks[1:], nil
 	case head == "body":
 		return string(c.resp.Body), true, toks[1:], nil
+	case head == "events":
+		return strconv.Itoa(len(c.resp.Events)), true, toks[1:], nil
+	case strings.HasPrefix(head, "event["):
+		return c.event(head, toks[1:])
 	case head == "header":
 		if len(toks) < 2 {
 			return "", false, nil, fmt.Errorf("expected: header <Name> ...")
@@ -199,7 +206,45 @@ func (c *evalCtx) subject(toks []string) (value string, exists bool, rest []stri
 		}
 		return render(v), true, toks[1:], nil
 	}
-	return "", false, nil, fmt.Errorf("unknown subject %q (use status, time, size, body, header, json)", head)
+	return "", false, nil, fmt.Errorf("unknown subject %q (use status, time, size, body, header, json, events, event[i])", head)
+}
+
+// event resolves event[i] (the data of the i-th event, negative counts from
+// the end) and event[i].json.path (a value inside that event's JSON).
+func (c *evalCtx) event(head string, rest []string) (string, bool, []string, error) {
+	end := strings.IndexByte(head, ']')
+	if end < 0 {
+		return "", false, nil, fmt.Errorf("expected event[index]")
+	}
+	i, err := strconv.Atoi(head[len("event["):end])
+	if err != nil {
+		return "", false, nil, fmt.Errorf("event index must be a number, like event[0] or event[-1]")
+	}
+	if i < 0 {
+		i += len(c.resp.Events)
+	}
+	if i < 0 || i >= len(c.resp.Events) {
+		return "", false, rest, nil
+	}
+	data := c.resp.Events[i]
+	path := head[end+1:]
+	if path == "" {
+		return data, true, rest, nil
+	}
+	if path != ".json" && !strings.HasPrefix(path, ".json.") && !strings.HasPrefix(path, ".json[") {
+		return "", false, nil, fmt.Errorf("expected event[i] or event[i].json.path")
+	}
+	dec := json.NewDecoder(strings.NewReader(data))
+	dec.UseNumber()
+	var doc any
+	if err := dec.Decode(&doc); err != nil {
+		return "", false, nil, fmt.Errorf("event %d is not JSON", i)
+	}
+	v, ok, err := lookup(doc, strings.TrimPrefix(path, ".json"))
+	if err != nil || !ok {
+		return "", false, rest, err
+	}
+	return render(v), true, rest, nil
 }
 
 func (c *evalCtx) assert(line string, variables map[string]string) (bool, string) {

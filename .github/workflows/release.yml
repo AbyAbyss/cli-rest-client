@@ -46,7 +46,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install snippet runtimes
-        run: python -m pip install --quiet requests httpie
+        run: python -m pip install --quiet requests httpie websockets
 
       - name: Test
         run: |

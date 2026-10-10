@@ -2,9 +2,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/AbyAbyss/cli-rest-client/internal/cli"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
@@ -41,7 +44,8 @@ func run(args []string) int {
 		fmt.Fprintf(out, "                                                export to Postman format\n")
 		fmt.Fprintf(out, "  term-rest-client [-data FILE] export -lang LANG [-raw] <Collection/Request>...\n")
 		fmt.Fprintf(out, "                                                print requests as code: curl, python, javascript, go, httpie\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n\nFlags:\n")
+		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n")
+		fmt.Fprintf(out, "  term-rest-client demo [-addr localhost:8080]  serve the demo API that the sample's Local environment uses\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -88,6 +92,10 @@ func run(args []string) int {
 			return cli.Env(os.Stdout, os.Stderr, ws, store, rest[1:])
 		case "history":
 			return cli.History(os.Stdout, os.Stderr, store, rest[1:])
+		case "demo":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return cli.Demo(ctx, os.Stdout, os.Stderr, rest[1:])
 		case "help":
 			fs.Usage()
 			return 0

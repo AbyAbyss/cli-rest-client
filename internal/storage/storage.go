@@ -160,6 +160,18 @@ func SampleWorkspace() *models.Workspace {
 	charge.PreRequest = "# runs before the request is sent\nset orderId = order-{{$randomInt}}"
 	charge.Tests = "status == 200\ntime < 5000\njson.json.orderId == {{orderId}}"
 
+	countries := req("Country (GraphQL)", "POST", "{{graphqlUrl}}", models.BodyGraphQL,
+		"query Country($code: ID!) {\n  country(code: $code) {\n    name\n    capital\n    currency\n    continent {\n      name\n    }\n  }\n}\n")
+	countries.GraphQLVariables = "{\n  \"code\": \"{{country}}\"\n}"
+	countries.Tests = "status == 200\njson.data.country.capital exists\njson.errors !exists"
+
+	live := req("Live events (SSE)", "GET", "{{sseUrl}}", models.BodyNone, "")
+	live.Tests = "status == 200\nheader Content-Type contains event-stream\nevents >= 1"
+
+	echo := req("Echo (WebSocket)", "GET", "{{wsUrl}}", models.BodyJSON, "{\n  \"hello\": \"from term-rest-client\"\n}")
+	echo.Type = models.TypeWebSocket
+	echo.Tests = "events >= 1\nevent[-1].json.hello == \"from term-rest-client\""
+
 	health := req("Health Check", "GET", "{{baseUrl}}/get", models.BodyNone, "")
 	health.Tests = "status == 200\ntime < 2000"
 
@@ -183,16 +195,24 @@ func SampleWorkspace() *models.Workspace {
 				Name:    "Payment Gateway",
 				Folders: []*models.Collection{{Name: "Charges", Requests: []*models.Request{charge}}},
 			},
+			{Name: "API Types", Requests: []*models.Request{countries, live, echo}},
 		},
 		Requests: []*models.Request{health},
 		Variables: []models.KeyValue{
 			{Key: "token", Value: "my-secret-token"},
+			{Key: "graphqlUrl", Value: "https://countries.trevorblades.com/graphql"},
+			{Key: "country", Value: "IN"},
+			{Key: "sseUrl", Value: "https://stream.wikimedia.org/v2/stream/recentchange"},
+			{Key: "wsUrl", Value: "wss://ws.postman-echo.com/raw"},
 		},
 		Environments: []*models.Environment{
 			{Name: "httpbin.org", Variables: []models.KeyValue{{Key: "baseUrl", Value: "https://httpbin.org"}}},
 			{Name: "Local", Variables: []models.KeyValue{
 				{Key: "baseUrl", Value: "http://localhost:8080"},
 				{Key: "token", Value: "local-dev-token"},
+				{Key: "graphqlUrl", Value: "http://localhost:8080/graphql"},
+				{Key: "sseUrl", Value: "http://localhost:8080/sse"},
+				{Key: "wsUrl", Value: "ws://localhost:8080/ws"},
 			}},
 		},
 		ActiveEnvironment: "httpbin.org",

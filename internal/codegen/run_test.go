@@ -56,6 +56,9 @@ func captureServer(t *testing.T) (*httptest.Server, func() []captured) {
 func fixedValues(base string) map[string]string {
 	return map[string]string{
 		"baseUrl":    base,
+		"graphqlUrl": base + "/graphql",
+		"sseUrl":     base + "/sse",
+		"country":    "IN",
 		"token":      "tok en/1",
 		"$uuid":      "3b1f8c2e-0000-4000-8000-000000000001",
 		"$timestamp": "1700000000",
@@ -71,7 +74,9 @@ func fixedValues(base string) map[string]string {
 func testRequests() []models.Request {
 	var out []models.Request
 	storage.SampleWorkspace().WalkRequests(func(_ []*models.Collection, r *models.Request) {
-		out = append(out, *r)
+		if r.Type != models.TypeWebSocket { // ws_run_test.go covers those
+			out = append(out, *r)
+		}
 	})
 	req := func(name, method, u, bodyType, body string) models.Request {
 		r := models.NewRequest(name)
@@ -113,6 +118,15 @@ func testRequests() []models.Request {
 
 	opts := req("Options", "OPTIONS", "{{baseUrl}}/ping", models.BodyNone, "")
 	out = append(out, opts)
+
+	gql := req("GraphQL", "POST", "{{baseUrl}}/graphql", models.BodyGraphQL,
+		"query Users($first: Int!, $role: String) {\n  users(first: $first, role: $role, tag: \"{{user}}\") { id name }\n}")
+	gql.GraphQLVariables = `{"first": {{count}}, "role": "admin-{{user}}", "nested": {"on": {{flag}}}}`
+	out = append(out, gql)
+
+	gqlGet := req("GraphQL GET", "GET", "{{baseUrl}}/graphql", models.BodyGraphQL, "{ me { id } }")
+	gqlGet.GraphQLVariables = `{"who": "{{user}}"}`
+	out = append(out, gqlGet)
 
 	custom := req("Custom method", "PURGE", "{{baseUrl}}/cache", models.BodyNone, "")
 	custom.Auth = models.Auth{Type: models.AuthBasic, Username: "{{user}}", Password: "p:a ss"}

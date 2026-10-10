@@ -26,6 +26,9 @@ type Prepared struct {
 	Missing []string
 	// Warnings are non-fatal problems, such as an invalid JSON body.
 	Warnings []string
+	// Message is the resolved message of a WebSocket request. Request is
+	// then the handshake: a GET to the ws:// or wss:// URL.
+	Message string
 }
 
 type resolver struct {
@@ -51,14 +54,29 @@ func Prepare(req models.Request, variables map[string]string) (*Prepared, error)
 	if rawURL == "" {
 		return nil, errors.New("URL is empty")
 	}
+	ws := req.Type == models.TypeWebSocket
 	if !strings.Contains(rawURL, "://") {
-		rawURL = "http://" + rawURL
+		if ws {
+			rawURL = "ws://" + rawURL
+		} else {
+			rawURL = "http://" + rawURL
+		}
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if ws {
+		switch u.Scheme { // http(s) URLs are accepted, as browsers do
+		case "http":
+			u.Scheme = "ws"
+		case "https":
+			u.Scheme = "wss"
+		case "ws", "wss":
+		default:
+			return nil, fmt.Errorf("unsupported URL scheme %q for a WebSocket (use ws or wss)", u.Scheme)
+		}
+	} else if u.Scheme != "http" && u.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported URL scheme %q (use http or https)", u.Scheme)
 	}
 	if u.Host == "" {
@@ -109,6 +127,29 @@ func Prepare(req models.Request, variables map[string]string) (*Prepared, error)
 		}
 	}
 
+	if ws {
+		// The handshake carries no body; the body is the first message.
+		p.Message = r.sub(req.Body)
+		req.Method, req.BodyType = http.MethodGet, models.BodyNone
+	}
+
+	var graphQL []byte // the POST body of a GraphQL request
+	if req.BodyType == models.BodyGraphQL {
+		q, variables, err := graphQLParts(r.sub(req.Body), r.sub(req.GraphQLVariables))
+		if err != nil {
+			return nil, err
+		}
+		if strings.EqualFold(strings.TrimSpace(req.Method), http.MethodGet) {
+			// GraphQL over HTTP: a GET carries the query in the URL.
+			addQuery("query", q)
+			if variables != nil {
+				addQuery("variables", string(variables))
+			}
+		} else {
+			graphQL = graphQLBody(q, variables)
+		}
+	}
+
 	if len(query) > 0 {
 		extra := strings.Join(query, "&")
 		if u.RawQuery == "" {
@@ -119,6 +160,10 @@ func Prepare(req models.Request, variables map[string]string) (*Prepared, error)
 	}
 
 	var contentType string
+	if graphQL != nil {
+		p.Body = graphQL
+		contentType = "application/json"
+	}
 	switch req.BodyType {
 	case models.BodyJSON:
 		p.Body = []byte(r.sub(req.Body))
@@ -246,4 +291,36 @@ func (p *Prepared) Curl() string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// graphQLParts checks a GraphQL query and its variables. Variables must be
+// empty or a JSON object; they are returned compacted.
+func graphQLParts(query, variables string) (string, json.RawMessage, error) {
+	if strings.TrimSpace(query) == "" {
+		return "", nil, errors.New("the GraphQL query is empty")
+	}
+	variables = strings.TrimSpace(variables)
+	if variables == "" {
+		return query, nil, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(variables), &obj); err != nil {
+		return "", nil, fmt.Errorf("GraphQL variables must be a JSON object: %v", err)
+	}
+	var buf bytes.Buffer
+	_ = json.Compact(&buf, []byte(variables))
+	return query, buf.Bytes(), nil
+}
+
+// graphQLBody is the JSON body of a GraphQL POST.
+func graphQLBody(query string, variables json.RawMessage) []byte {
+	body := struct {
+		Query     string          `json:"query"`
+		Variables json.RawMessage `json:"variables,omitempty"`
+	}{query, variables}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(body)
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 }

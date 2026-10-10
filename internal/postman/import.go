@@ -515,16 +515,9 @@ func convertBody(b *pmBody, r *models.Request, res *Result, path string) {
 			Variables string `json:"variables"`
 		}
 		_ = json.Unmarshal(b.GraphQL, &g)
-		payload := map[string]any{"query": g.Query}
-		if v := strings.TrimSpace(g.Variables); v != "" {
-			var parsed any
-			if json.Unmarshal([]byte(v), &parsed) == nil {
-				payload["variables"] = parsed
-			}
-		}
-		out, _ := json.MarshalIndent(payload, "", "  ")
-		r.BodyType = models.BodyJSON
-		r.Body = convertDynamic(string(out))
+		r.BodyType = models.BodyGraphQL
+		r.Body = convertDynamic(g.Query)
+		r.GraphQLVariables = convertDynamic(strings.TrimSpace(g.Variables))
 	case "file":
 		res.warn("%s: binary file body was skipped (file uploads are not supported)", path)
 	}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -37,6 +38,7 @@ type sendResult struct {
 	missing     []string
 	warnings    []string
 	tests       []script.Result
+	socket      *wsSession // a WebSocket connection instead of a response
 }
 
 func (a *App) buildResponse() {
@@ -114,6 +116,61 @@ func (a *App) toggleSection(id string) {
 	a.response.ScrollTo(row, col)
 }
 
+// writeTests writes the Tests section.
+func (a *App) writeTests(res *sendResult, line func(string, ...any), section func(id, title, extra string) bool) {
+	t, esc := a.theme, tview.Escape
+	passed, total := testCounts(res.tests)
+	summary := t.HexSuccess
+	if passed < total {
+		summary = t.HexError
+	}
+	if !section(secTests, "Tests", fmt.Sprintf("[%s]%d/%d passed", summary, passed, total)) {
+		return
+	}
+	for _, tr := range res.tests {
+		switch {
+		case tr.Capture != nil:
+			line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
+		case tr.Passed:
+			line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
+		default:
+			line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
+		}
+	}
+}
+
+// writeEvents lists stream events with their arrival time, type and id.
+// JSON data is shown compact and highlighted; other data as text.
+func writeEvents(line func(string, ...any), events []httpclient.Event, t *Theme) {
+	if len(events) == 0 {
+		line("  [%s]No events yet.", t.HexMuted)
+		return
+	}
+	for _, e := range events {
+		meta := fmt.Sprintf("[%s]+%s", t.HexMuted, eventTime(e.At))
+		if e.Type != "" {
+			meta += fmt.Sprintf(" [%s]%s", t.HexAccent, tview.Escape(e.Type))
+		}
+		if e.ID != "" {
+			meta += fmt.Sprintf(" [%s]#%s", t.HexMuted, tview.Escape(e.ID))
+		}
+		data := tview.Escape(e.Data)
+		var compact bytes.Buffer
+		if json.Compact(&compact, []byte(e.Data)) == nil {
+			data = highlightJSON(compact.String(), t)
+		}
+		line("  %s  [%s]%s", meta, t.HexText, strings.ReplaceAll(data, "\n", "\n      "))
+	}
+}
+
+// eventTime is the offset of an event from the start of the request.
+func eventTime(d time.Duration) string {
+	if d <= 0 {
+		return "0.000s" // events rebuilt from a saved body have no times
+	}
+	return fmt.Sprintf("%.3fs", d.Seconds())
+}
+
 // writeHeaders lists headers sorted by name.
 func writeHeaders(line func(string, ...any), h http.Header, t *Theme) {
 	names := make([]string, 0, len(h))
@@ -144,6 +201,11 @@ func (a *App) clientOptions() httpclient.Options {
 // send runs the pre-request script, sends the request in the background and
 // runs the tests when the response arrives.
 func (a *App) send() {
+	if a.req.Type == models.TypeWebSocket {
+		a.wsSend()
+		return
+	}
+	a.wsDisconnect() // an HTTP request replaces the connection in the pane
 	if a.sending {
 		a.setStatus(levelWarning, "A request is already running. Press Esc to cancel it.")
 		return
@@ -192,10 +254,51 @@ func (a *App) send() {
 	a.setStatus(levelInfo, "Sending "+res.method+" "+res.url)
 
 	client := httpclient.NewClient(a.clientOptions())
+	update := a.streamUpdater(res)
 	go func() {
-		resp, err := client.Do(ctx, prepared.Request)
+		resp, err := client.DoStream(ctx, prepared.Request, update)
 		a.tv.QueueUpdateDraw(func() { a.finish(res, req.Tests, resp, err) })
 	}()
+}
+
+// streamDrawInterval limits how often a stream redraws the response pane.
+const streamDrawInterval = 80 * time.Millisecond
+
+// streamUpdater returns a callback for DoStream that shows a stream as it
+// arrives. Updates are coalesced: at most one redraw per interval, always
+// ending with the latest snapshot.
+func (a *App) streamUpdater(res *sendResult) func(*httpclient.Response) {
+	var mu sync.Mutex
+	var latest *httpclient.Response
+	scheduled := false
+	return func(snap *httpclient.Response) {
+		mu.Lock()
+		defer mu.Unlock()
+		latest = snap
+		if scheduled {
+			return
+		}
+		scheduled = true
+		time.AfterFunc(streamDrawInterval, func() {
+			mu.Lock()
+			snap := latest
+			scheduled = false
+			mu.Unlock()
+			a.tv.QueueUpdateDraw(func() {
+				if res != a.result || !a.sending {
+					return // finished or superseded in the meantime
+				}
+				res.resp = snap
+				if snap.Stream != "" {
+					a.setStatus(levelInfo, fmt.Sprintf("Streaming: %s so far. Esc stops", plural(len(snap.Events), "event")))
+				}
+				a.renderResponse()
+				if a.tv.GetFocus() != a.response {
+					a.response.ScrollToEnd() // follow the stream unless the user is reading
+				}
+			})
+		})
+	}
 }
 
 func (a *App) finish(res *sendResult, tests string, resp *httpclient.Response, err error) {
@@ -220,6 +323,7 @@ func (a *App) finish(res *sendResult, tests string, resp *httpclient.Response, e
 			variables := a.ws.VariableMap()
 			res.tests = script.RunTests(tests, script.Response{
 				Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration,
+				Events: eventData(resp.Events),
 			}, variables)
 			var assignments []script.Assignment
 			for _, r := range res.tests {
@@ -231,6 +335,14 @@ func (a *App) finish(res *sendResult, tests string, resp *httpclient.Response, e
 		}
 		passed, total := testCounts(res.tests)
 		msg := fmt.Sprintf("%s in %d ms", resp.Status, resp.Duration.Milliseconds())
+		if resp.Stream != "" {
+			msg = fmt.Sprintf("%s, %s in %s", resp.Status, plural(len(resp.Events), "event"), streamDuration(resp.Duration))
+			if resp.Stopped {
+				msg = "Stream stopped: " + msg
+			} else {
+				msg = "Stream ended: " + msg
+			}
+		}
 		level := levelSuccess
 		if total > 0 {
 			msg += fmt.Sprintf(", tests %d/%d passed", passed, total)
@@ -245,7 +357,25 @@ func (a *App) finish(res *sendResult, tests string, resp *httpclient.Response, e
 	}
 	a.recordHistory(res)
 	a.renderResponse()
-	a.response.ScrollToBeginning()
+	if resp == nil || resp.Stream == "" {
+		a.response.ScrollToBeginning()
+	}
+}
+
+func eventData(events []httpclient.Event) []string {
+	out := make([]string, len(events))
+	for i, e := range events {
+		out[i] = e.Data
+	}
+	return out
+}
+
+// streamDuration shows short streams in ms and long ones in seconds.
+func streamDuration(d time.Duration) string {
+	if d < 10*time.Second {
+		return fmt.Sprintf("%d ms", d.Milliseconds())
+	}
+	return d.Round(100 * time.Millisecond).String()
 }
 
 // linkedPath is "Collection / Folder / Request" for the open saved request.
@@ -341,7 +471,22 @@ func (a *App) renderResponse() {
 	}
 	line("")
 
+	// section writes a clickable, foldable heading and reports whether
+	// the section's content should be shown.
+	section := func(id, title, extra string) bool {
+		icon := "▾"
+		if a.sectionCollapsed(id) {
+			icon = "▸"
+		}
+		line("")
+		line(`["sec-%s"][%s]%s [%s::b]%s[-:-:-] %s  [%s]· %c[""]`,
+			id, t.HexMuted, icon, t.HexAccent, title, extra, t.HexMuted, sectionKey(id))
+		return !a.sectionCollapsed(id)
+	}
+
 	switch {
+	case res.socket != nil:
+		a.renderWebSocket(res, line, section)
 	case a.sending && res == a.result && res.resp == nil && res.err == nil && !res.cancelled:
 		line("[%s]Sending…  [%s](Esc to cancel)", t.HexWarning, t.HexMuted)
 		a.response.SetTitle(" Response ")
@@ -367,47 +512,33 @@ func (a *App) renderResponse() {
 		if r.Truncated {
 			size += " (truncated)"
 		}
-		line("[%s::b]%d %s[-:-:-]   [%s]Time [%s]%d ms   [%s]Size [%s]%s   [%s]%s",
+		elapsed := fmt.Sprintf("%d ms", r.Duration.Milliseconds())
+		if r.Stream != "" {
+			elapsed = streamDuration(r.Duration)
+		}
+		line("[%s::b]%d %s[-:-:-]   [%s]Time [%s]%s   [%s]Size [%s]%s   [%s]%s",
 			color, r.StatusCode, esc(r.StatusText()),
-			t.HexMuted, t.HexText, r.Duration.Milliseconds(),
+			t.HexMuted, t.HexText, elapsed,
 			t.HexMuted, t.HexText, size,
 			t.HexMuted, esc(r.Proto))
+		if r.Stream != "" {
+			kind := map[string]string{"sse": "Server-Sent Events", "ndjson": "NDJSON stream"}[r.Stream]
+			switch {
+			case !r.Done:
+				line("[%s::b]● Streaming[-:-:-] [%s]%s · %s so far  [%s](Esc to stop)", t.HexSuccess, t.HexText, kind, plural(len(r.Events), "event"), t.HexMuted)
+			case r.Stopped:
+				line("[%s]■ Stopped [%s]%s · %s received", t.HexWarning, t.HexText, kind, plural(len(r.Events), "event"))
+			default:
+				line("[%s]■ Ended [%s]%s · %s received", t.HexInfo, t.HexText, kind, plural(len(r.Events), "event"))
+			}
+		}
 		if r.URL != "" && r.URL != res.url {
 			line("[%s]Redirected to %s", t.HexInfo, esc(r.URL))
 		}
 		a.response.SetTitle(fmt.Sprintf(" Response · [%s]%d[-] ", color, r.StatusCode))
 
-		// section writes a clickable, foldable heading and reports whether
-		// the section's content should be shown.
-		section := func(id, title, extra string) bool {
-			icon := "▾"
-			if a.sectionCollapsed(id) {
-				icon = "▸"
-			}
-			line("")
-			line(`["sec-%s"][%s]%s [%s::b]%s[-:-:-] %s  [%s]· %c[""]`,
-				id, t.HexMuted, icon, t.HexAccent, title, extra, t.HexMuted, sectionKey(id))
-			return !a.sectionCollapsed(id)
-		}
-
 		if len(res.tests) > 0 {
-			passed, total := testCounts(res.tests)
-			summary := t.HexSuccess
-			if passed < total {
-				summary = t.HexError
-			}
-			if section(secTests, "Tests", fmt.Sprintf("[%s]%d/%d passed", summary, passed, total)) {
-				for _, tr := range res.tests {
-					switch {
-					case tr.Capture != nil:
-						line("  [%s]→ [%s]%s", t.HexInfo, t.HexText, esc(tr.Message))
-					case tr.Passed:
-						line("  [%s]✓ [%s]%s", t.HexSuccess, t.HexText, esc(tr.Source))
-					default:
-						line("  [%s]✗ [%s]%s  [%s]%s", t.HexError, t.HexText, esc(tr.Source), t.HexError, esc(tr.Message))
-					}
-				}
-			}
+			a.writeTests(res, line, section)
 		}
 
 		if section(secReqHeaders, "Request Headers", fmt.Sprintf("[%s](%d)", t.HexMuted, len(res.reqHeaders))) {
@@ -416,7 +547,12 @@ func (a *App) renderResponse() {
 		if section(secRespHeaders, "Response Headers", fmt.Sprintf("[%s](%d)", t.HexMuted, len(r.Headers))) {
 			writeHeaders(line, r.Headers, t)
 		}
-		if section(secBody, "Body", fmt.Sprintf("[%s]%s  · s to save", t.HexMuted, size)) {
+		switch {
+		case r.Stream != "":
+			if section(secBody, "Events", fmt.Sprintf("[%s](%d)  · s saves the raw stream", t.HexMuted, len(r.Events))) {
+				writeEvents(line, r.Events, t)
+			}
+		case section(secBody, "Body", fmt.Sprintf("[%s]%s  · s to save", t.HexMuted, size)):
 			body, _ := prettyBody(r.Body, r.Headers.Get("Content-Type"), t)
 			sb.WriteString("[" + t.HexText + "]")
 			sb.WriteString(body)
@@ -463,7 +599,7 @@ func (a *App) copyCode(r models.Request) {
 	}
 	name := r.Name
 	if name == "" {
-		name = r.Method + " request"
+		name = r.Label() + " request"
 	}
 	a.copyText(snip.Text, fmt.Sprintf("%q as %s", name, codeLabel(l)))
 	if len(snip.Missing) > 0 {
@@ -568,6 +704,20 @@ func (a *App) showCode() {
 }
 
 func (a *App) formatBody() {
+	if a.req.BodyType == models.BodyGraphQL {
+		text := strings.TrimSpace(a.gqlVarsArea.GetText())
+		if text == "" {
+			return
+		}
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, []byte(text), "", "  "); err != nil {
+			a.setStatus(levelError, "Variables are not valid JSON: "+err.Error())
+			return
+		}
+		a.gqlVarsArea.SetText(buf.String(), false)
+		a.setStatus(levelSuccess, "Formatted the GraphQL variables")
+		return
+	}
 	text := strings.TrimSpace(a.bodyArea.GetText())
 	if text == "" {
 		return

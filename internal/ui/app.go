@@ -10,6 +10,7 @@ import (
 
 	"github.com/AbyAbyss/cli-rest-client/internal/clipboard"
 	"github.com/AbyAbyss/cli-rest-client/internal/curl"
+	"github.com/AbyAbyss/cli-rest-client/internal/graphql"
 	"github.com/AbyAbyss/cli-rest-client/internal/models"
 	"github.com/AbyAbyss/cli-rest-client/internal/storage"
 )
@@ -71,6 +72,9 @@ type App struct {
 
 	// Tab editors.
 	paramsArea, headersArea, bodyArea, preArea, testsArea, varsArea *tview.TextArea
+	gqlVarsArea                                                     *tview.TextArea
+	bodyEditors                                                     *tview.Flex
+	schemas                                                         map[string]*graphql.Schema // fetched GraphQL schemas by URL
 	varsTarget                                                      *tview.DropDown
 	envButtons                                                      []*tview.Button
 	editingEnv                                                      string
@@ -358,6 +362,9 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case key == tcell.KeyCtrlN:
 		a.newRequest()
 		return nil
+	case key == tcell.KeyF6:
+		a.browseSchema(false)
+		return nil
 	case key == tcell.KeyCtrlG || key == tcell.KeyF4:
 		a.showCode()
 		return nil
@@ -370,6 +377,10 @@ func (a *App) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case key == tcell.KeyEsc:
 		if a.sending {
 			a.cancelRequest()
+			return nil
+		}
+		if a.wsSession().open() {
+			a.wsDisconnect()
 			return nil
 		}
 		if focus == a.urlInput {

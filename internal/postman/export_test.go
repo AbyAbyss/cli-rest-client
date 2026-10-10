@@ -92,6 +92,9 @@ func TestRoundTripSampleWorkspace(t *testing.T) {
 		}
 		before, after := requestsByPath(c), requestsByPath(res.Collection)
 		for path, r1 := range before {
+			if r1.Type == models.TypeWebSocket {
+				continue // not representable in a collection file (see TestExportSkipsWebSockets)
+			}
 			r2 := after[path]
 			if r2 == nil {
 				t.Fatalf("%s/%s missing", c.Name, path)
@@ -219,7 +222,7 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 	srv := testutil.NewHTTPBin()
 	defer srv.Close()
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "pm.js")
 	os.WriteFile(stub, []byte(pmStub), 0o644)
@@ -227,7 +230,7 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 
 	checked := 0
 	ws.WalkRequests(func(_ []*models.Collection, r *models.Request) {
-		if strings.TrimSpace(r.Tests) == "" {
+		if strings.TrimSpace(r.Tests) == "" || r.Type == models.TypeWebSocket {
 			return
 		}
 		vars := ws.VariableMap()
@@ -245,7 +248,11 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 		for k, v := range vars {
 			nativeVars[k] = v
 		}
-		native := script.RunTests(r.Tests, script.Response{Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration}, nativeVars)
+		var events []string
+		for _, e := range resp.Events {
+			events = append(events, e.Data)
+		}
+		native := script.RunTests(r.Tests, script.Response{Status: resp.StatusCode, Headers: resp.Headers, Body: resp.Body, Duration: resp.Duration, Events: events}, nativeVars)
 
 		res := &ExportResult{}
 		js := exportScript(r.Tests, false, res, r.Name)
@@ -293,5 +300,16 @@ func TestExportedTestsBehaveTheSame(t *testing.T) {
 	})
 	if checked < 15 {
 		t.Fatalf("only %d assertions compared", checked)
+	}
+}
+
+func TestExportSkipsWebSockets(t *testing.T) {
+	ws := models.NewRequest("Socket")
+	ws.Type, ws.URL = models.TypeWebSocket, "wss://x.test"
+	get := models.NewRequest("Get")
+	get.URL = "https://x.test"
+	res, err := ExportCollection(&models.Collection{Name: "Mixed", Requests: []*models.Request{&ws, &get}})
+	if err != nil || res.Requests != 1 || len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "Mixed / Socket: WebSocket") {
+		t.Fatalf("%v %d %v", err, res.Requests, res.Notes)
 	}
 }

@@ -64,6 +64,9 @@ func Generate(lang string, r models.Request, values map[string]string, template 
 	if !ok {
 		return nil, fmt.Errorf("unknown language %q (use %s)", lang, IDs())
 	}
+	if r.Type == models.TypeWebSocket {
+		return generateWS(l.ID, r, values, template)
+	}
 	if l.ID == "curl" {
 		if template {
 			c := curl.Template(r)

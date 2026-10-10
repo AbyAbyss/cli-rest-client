@@ -2,9 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +25,7 @@ func TestSampleWorkspace(t *testing.T) {
 	defer srv.Close()
 
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	store := &storage.Store{Path: filepath.Join(t.TempDir(), "ws.json")}
 
 	var out, errOut bytes.Buffer
@@ -307,4 +311,152 @@ func TestExportCurl(t *testing.T) {
 	if Export(&out, &errOut, ws, []string{"-curl"}) != 2 || Export(&out, &errOut, ws, []string{"-curl", "Nope"}) != 2 {
 		t.Fatal("bad arguments should exit 2")
 	}
+}
+
+func TestRunStreams(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	finite := models.NewRequest("Progress")
+	finite.URL = srv.URL + "/sse?count=3&interval=20"
+	finite.Tests = "events == 3\nevent[-1].json.status == testing"
+	endless := models.NewRequest("Endless")
+	endless.URL = srv.URL + "/ndjson?count=0&interval=20"
+	endless.Tests = "events >= 3"
+	ws.Collections = []*models.Collection{{Name: "Streams", Requests: []*models.Request{&finite, &endless}}}
+
+	var out, errOut bytes.Buffer
+	if code := Run(&out, &errOut, ws, nil, []string{"-stream", "300ms", "Streams"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"3 events (stream ended)", "✓ event[-1].json.status == testing", "events (stopped after 300ms)", "✓ events >= 3"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunWebSocket(t *testing.T) {
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	echo := models.NewRequest("Echo")
+	echo.Type, echo.URL, echo.Body = models.TypeWebSocket, srv.URL+"/ws", `{"n":1}`
+	echo.Tests = "status == 101\nevents == 2\nevent[0].json.type == welcome\nevent[-1].json.n == 1\njson.n == 1"
+	bye := models.NewRequest("Bye")
+	bye.Type, bye.URL, bye.Body = models.TypeWebSocket, srv.URL+"/ws", "bye"
+	bye.Tests = "events == 1"
+	ws.Collections = []*models.Collection{{Name: "Sockets", Requests: []*models.Request{&echo, &bye}}}
+
+	var out, errOut bytes.Buffer
+	start := time.Now()
+	if code := Run(&out, &errOut, ws, nil, []string{"Sockets"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"WS Echo", "101 Switching Protocols", "1 sent, 2 received (quiet for 1s)", "✓ event[-1].json.n == 1", "1 sent, 1 received (closed normally (1000): bye)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if d := time.Since(start); d > 4*time.Second {
+		t.Errorf("run should stop when it goes quiet, took %s", d)
+	}
+}
+
+func TestHelpfulErrors(t *testing.T) {
+	// A workspace like an older one: no environments, a flat collection.
+	ws := &models.Workspace{Settings: models.Settings{TimeoutSeconds: 5}}
+	get := models.NewRequest("Get JSON")
+	login := models.NewRequest("Login")
+	ws.Collections = []*models.Collection{{Name: "User Service", Requests: []*models.Request{&get}}, {Name: "Auth API", Requests: []*models.Request{&login}}}
+
+	var out, errOut bytes.Buffer
+	if Run(&out, &errOut, ws, nil, []string{"-env", "Local", "Auth API"}) != 2 || !strings.Contains(errOut.String(), "This workspace has no environments") {
+		t.Fatalf("env hint: %s", errOut.String())
+	}
+	errOut.Reset()
+	if Run(&out, &errOut, ws, nil, []string{"User Service/Lookup"}) != 2 {
+		t.Fatal("unknown path should exit 2")
+	}
+	msg := errOut.String()
+	for _, want := range []string{"Did you mean:\n  User Service\n  User Service/Get JSON", "That path is in the sample workspace", "-data demo.json list", "term-rest-client list"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("missing %q in:\n%s", want, msg)
+		}
+	}
+
+	// -env global (and globals, none) means the global variables only.
+	srv := testutil.NewHTTPBin()
+	defer srv.Close()
+	login.URL = srv.URL + "/get"
+	ws.Environments = []*models.Environment{{Name: "Staging"}}
+	for _, name := range []string{"global", "Globals", "none"} {
+		out.Reset()
+		errOut.Reset()
+		if code := Run(&out, &errOut, ws, nil, []string{"-env", name, "Auth API"}); code != 0 {
+			t.Fatalf("-env %s: exit %d %s", name, code, errOut.String())
+		}
+	}
+	errOut.Reset()
+	Run(&out, &errOut, ws, nil, []string{"-env", "Local", "Auth API"})
+	if !strings.Contains(errOut.String(), `Environments in this workspace: "Staging"`) {
+		t.Fatalf("env list: %s", errOut.String())
+	}
+}
+
+func TestDemoServer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var out, errOut syncBuffer
+	done := make(chan int)
+	go func() { done <- Demo(ctx, &out, &errOut, []string{"-addr", "127.0.0.1:0"}) }()
+
+	var base string
+	for i := 0; i < 100 && base == ""; i++ {
+		if m := regexp.MustCompile(`Demo server on (http://\S+)`).FindStringSubmatch(out.String()); m != nil {
+			base = m[1]
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if base == "" {
+		t.Fatalf("no address printed: %s %s", out.String(), errOut.String())
+	}
+	// The sample workspace runs against it, Local-style.
+	ws := storage.SampleWorkspace()
+	testutil.UseLocal(ws, base)
+	var runOut, runErr bytes.Buffer
+	if code := Run(&runOut, &runErr, ws, nil, []string{"Auth API", "User Service/Lookup", "API Types"}); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, runOut.String(), runErr.String())
+	}
+	cancel()
+	if code := <-done; code != 0 || !strings.Contains(out.String(), "Demo server stopped.") {
+		t.Fatalf("exit %d: %s %s", code, out.String(), errOut.String())
+	}
+
+	// A busy port is explained.
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer l.Close()
+	var e2 bytes.Buffer
+	if Demo(context.Background(), &out, &e2, []string{"-addr", l.Addr().String()}) != 1 || !strings.Contains(e2.String(), "already in use") {
+		t.Fatalf("busy port: %s", e2.String())
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for one writer and one reader.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

@@ -44,7 +44,7 @@ func (a *App) rebuildTree(sel any) {
 			marker = fmt.Sprintf("[%s]●[-]", t.HexAccent)
 		}
 		rn := tview.NewTreeNode(fmt.Sprintf("%s[%s]%-6s[-] [%s]%s",
-			marker, t.methodColor(r.Method), r.Method, t.HexText, tview.Escape(r.Name))).
+			marker, t.methodColor(r.Label()), r.Label(), t.HexText, tview.Escape(r.Name))).
 			SetReference(r)
 		a.styleNode(rn)
 		parent.AddChild(rn)
@@ -556,7 +556,7 @@ func suggestName(r models.Request) string {
 	parts := strings.Split(strings.Trim(u, "/"), "/")
 	for i := len(parts) - 1; i >= 1; i-- {
 		if p := strings.TrimSpace(parts[i]); p != "" && !strings.HasPrefix(p, "{{") {
-			return r.Method + " " + p
+			return r.Label() + " " + p
 		}
 	}
 	return "New Request"

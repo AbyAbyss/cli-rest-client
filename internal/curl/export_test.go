@@ -18,6 +18,9 @@ func TestTemplateRoundTrip(t *testing.T) {
 	vars["orderId"] = "o-1"
 	checked := 0
 	ws.WalkRequests(func(_ []*models.Collection, r *models.Request) {
+		if r.Type == models.TypeWebSocket {
+			return // curl can't do WebSocket; codegen writes websocat for those
+		}
 		cmd := Template(*r)
 		if strings.Contains(cmd.Text, "{{$") {
 			return // dynamic values differ on every run
@@ -112,5 +115,54 @@ func TestTemplateDetails(t *testing.T) {
 	}
 	if strings.Contains(got, "off=") || strings.Contains(got, "skip") {
 		t.Errorf("disabled entries leaked:\n%s", got)
+	}
+}
+
+func TestGraphQLCurl(t *testing.T) {
+	r := models.NewRequest("gql")
+	r.Method, r.URL, r.BodyType = "POST", "{{baseUrl}}/graphql", models.BodyGraphQL
+	r.Body = "query Users($n: Int) {\n  users(first: $n, tag: \"{{tag}}\") { id }\n}"
+	r.GraphQLVariables = "{\n  \"n\": {{count}},\n  \"role\": \"{{role}}\"\n}"
+	vars := map[string]string{"baseUrl": "https://api.test", "tag": "t's", "count": "3", "role": "admin"}
+
+	cmd := Template(r)
+	if !strings.Contains(cmd.Text, `--data-raw '{"query":"query Users($n: Int) {\n  users(first: $n, tag: \"{{tag}}\") { id }\n}","variables":{"n":{{count}},"role":"{{role}}"}}'`) {
+		t.Fatalf("template:\n%s", cmd.Text)
+	}
+	back, err := Parse(cmd.Text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Request.BodyType != models.BodyGraphQL || back.Request.Body != r.Body || back.Request.GraphQLVariables != r.GraphQLVariables {
+		t.Fatalf("parsed back as %s\nquery %q\nvariables %q", back.Request.BodyType, back.Request.Body, back.Request.GraphQLVariables)
+	}
+	p1, _ := engine.Prepare(r, vars)
+	p2, _ := engine.Prepare(back.Request, vars)
+	b1, _ := io.ReadAll(p1.Request.Body)
+	b2, _ := io.ReadAll(p2.Request.Body)
+	if string(b1) != string(b2) || !strings.Contains(string(b1), `"variables":{"n":3,"role":"admin"}`) {
+		t.Fatalf("bodies differ:\n%s\n%s", b1, b2)
+	}
+
+	// The resolved command sends the same body, and GET puts it in the URL.
+	res, _ := Resolved(r, vars)
+	if !strings.Contains(res.Text, `t'\''s`) || !strings.Contains(res.Text, `"variables":{"n":3,"role":"admin"}`) {
+		t.Fatalf("resolved:\n%s", res.Text)
+	}
+	r.Method = "GET"
+	if get := Template(r).Text; strings.Contains(get, "--data-raw") || !strings.Contains(get, "?query=query+Users") || !strings.Contains(get, "&variables=%7B%22n%22%3A{{count}}") {
+		t.Fatalf("GET template:\n%s", get)
+	}
+}
+
+func TestParseRecognisesGraphQL(t *testing.T) {
+	res, err := Parse(`curl https://api.test/graphql -H 'Content-Type: application/json' --data-raw '{"query":"{ me { id } }","operationName":null}'`)
+	if err != nil || res.Request.BodyType != models.BodyGraphQL || res.Request.Body != "{ me { id } }" || res.Request.GraphQLVariables != "" {
+		t.Fatalf("%v %+v", err, res.Request)
+	}
+	// Other JSON stays JSON.
+	res, _ = Parse(`curl https://api.test --json '{"query":"x","page":2}'`)
+	if res.Request.BodyType != models.BodyJSON {
+		t.Fatalf("a JSON body with other keys is not GraphQL: %s", res.Request.BodyType)
 	}
 }

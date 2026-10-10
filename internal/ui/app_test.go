@@ -262,7 +262,7 @@ func TestSendRunsScriptsAndTests(t *testing.T) {
 	srv := testutil.NewHTTPBin()
 	defer srv.Close()
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	h := start(t, ws)
 
 	// Open Payment Gateway / Charge: it has a pre-request script and tests.
@@ -682,7 +682,7 @@ func TestResponseSectionsFold(t *testing.T) {
 	srv := testutil.NewHTTPBin()
 	defer srv.Close()
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	h := start(t, ws)
 	bearer := reqAt(t, ws, "Auth API/Bearer Token")
 	h.do(func() { h.a.loadIntoBuilder(*bearer, bearer); h.a.tv.SetFocus(h.a.urlInput) })
@@ -756,7 +756,7 @@ func TestHistory(t *testing.T) {
 	srv := testutil.NewHTTPBin()
 	defer srv.Close()
 	ws := storage.SampleWorkspace()
-	ws.SetVariable("baseUrl", srv.URL)
+	testutil.UseLocal(ws, srv.URL)
 	h := start(t, ws)
 
 	send := func(r *models.Request) {
@@ -987,8 +987,13 @@ func TestEnvironmentsUI(t *testing.T) {
 		if len(vs) != 1 || vs[0].Value != srv.URL {
 			t.Fatalf("edit not stored in the environment: %v", vs)
 		}
-		if len(h.a.ws.Variables) != 1 || h.a.ws.Variables[0].Key != "token" {
+		if g := h.a.ws.Variables; len(g) != len(storage.SampleWorkspace().Variables) || g[0].Key != "token" {
 			t.Fatal("globals must be untouched")
+		}
+		for _, kv := range h.a.ws.Variables {
+			if kv.Key == "baseUrl" {
+				t.Fatal("the edit went to the globals")
+			}
 		}
 		h.a.useEditedEnv()
 		if h.a.ws.ActiveEnvironment != "Staging" {

@@ -144,8 +144,13 @@ func goStr(s Str, ids map[string]string) string {
 	if len(s) == 0 {
 		return `""`
 	}
+	s = mergeLits(s)
 	parts := make([]string, len(s))
 	for i, p := range s {
+		if p.Var != "" && p.Escape {
+			parts[i] = "url.QueryEscape(" + ids[p.Var] + ")"
+			continue
+		}
 		if p.Var != "" {
 			parts[i] = ids[p.Var]
 			continue
@@ -210,4 +215,17 @@ func goQuery(s *Spec, ids map[string]string) string {
 		merged = append(merged, strconv.Quote(lits))
 	}
 	return strings.Join(merged, " + ")
+}
+
+// mergeLits joins neighbouring literal parts.
+func mergeLits(s Str) Str {
+	var out Str
+	for _, p := range s {
+		if n := len(out); n > 0 && p.Var == "" && out[n-1].Var == "" {
+			out[n-1].Lit += p.Lit
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }

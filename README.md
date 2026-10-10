@@ -9,8 +9,11 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 
 ## Features
 
-- **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, with a URL bar that autocompletes `{{variables}}`.
-- **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML or form-urlencoded bodies. Any line can be disabled by starting it with `#`.
+- **Request builder**: GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, plus WebSocket, with a URL bar that autocompletes `{{variables}}`.
+- **Params, Headers, Auth and Body tabs**: query parameters, headers, Basic / Bearer / API key auth, and JSON, text, XML, form-urlencoded or GraphQL bodies. Any line can be disabled by starting it with `#`.
+- **GraphQL**: a Query editor and a Variables editor side by side, and a schema browser (`F6`) that reads the server's schema and writes a query for any field.
+- **Streaming responses**: Server-Sent Events and NDJSON show up live as they arrive, each event with its time. `Esc` stops a stream and keeps what came in; tests can count and inspect events.
+- **WebSocket**: connect with your headers and auth, send messages, and watch a live log of what goes out and comes back. Tests run on the received messages when the connection ends.
 - **Environments, like Postman**: named variable sets such as Local, Staging and Production. Pick one from the Environment selector next to the URL (or `Alt+E`); its values override Globals. Create, rename, duplicate and delete them in the Variables tab.
 - **Variables**: `{{name}}` works in the URL, params, headers, auth fields and body. Built-ins: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`.
 - **Pre-request scripts**: `set name = value` / `unset name` before a request is sent.
@@ -43,6 +46,10 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 | **Folders**: nest them as deep as you like, and press `m` to move a request or folder | **Request and response headers**, each foldable (here the body is folded) |
 | ![Request history](assets/screenshots/history.png) | ![Code snippets](assets/screenshots/code.png) |
 | **History**: every request you sent, grouped by day; the status bar shows the full URL | **`Ctrl+G`**: the request as cURL, Python, JavaScript, Go or HTTPie, ready to copy |
+| ![Server-Sent Events arriving live](assets/screenshots/streaming.png) | ![WebSocket message log](assets/screenshots/websocket.png) |
+| **Streaming**: Server-Sent Events and NDJSON appear as they arrive | **WebSocket**: connect, send, and watch what comes back |
+| ![GraphQL schema browser](assets/screenshots/graphql-schema.png) | ![GraphQL query and variables](assets/screenshots/graphql.png) |
+| **GraphQL schema** (`F6`): pick a field and get a query for it | **GraphQL**: query and variables side by side |
 
 ## Quick Start
 
@@ -180,6 +187,20 @@ go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
 
 This puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`), which needs to be on your `PATH`.
 
+### Try it with the samples
+
+A new workspace file starts with sample collections: a user service, auth, payments, and GraphQL, SSE and WebSocket examples. `term-rest-client demo` runs a small local server that answers all of them, so you can try everything offline without touching your own workspace:
+
+```bash
+term-rest-client demo                    # leave this running (Ctrl+C stops it)
+
+# in another terminal
+term-rest-client -data demo.json         # the app, with its own sample workspace
+term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
+```
+
+The sample's **Local** environment points at the demo server (`localhost:8080`); **httpbin.org** uses the public httpbin.org instead. `-addr localhost:9090` runs the demo on another port.
+
 ### First run
 
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
@@ -208,11 +229,12 @@ Tabs that contain something show a marker, for example `Headers (2)` or `Tests �
 | Keys | Action |
 |------|--------|
 | `Ctrl+R`, `F5`, `Enter` in the URL field | Send the request (`Ctrl+Enter` also works in terminals that report it) |
-| `Esc` | Cancel a running request, otherwise jump to the Collections tree |
+| `Esc` | Cancel a running request, stop a stream, or close a WebSocket; otherwise jump to the Collections tree |
 | `Ctrl+S` | Save. The first save of a new request asks for a name and collection |
 | `Alt+S` | Save as a new request |
 | `Ctrl+N` | New empty request |
-| `Ctrl+P` | Pretty-print the JSON body |
+| `Ctrl+P` | Pretty-print the JSON body (the variables, for GraphQL) |
+| `F6` | GraphQL: browse the schema of the URL and write a query for a field |
 | `Ctrl+G`, `F4` | Show the request as code. In that window `←`/`→` switch language, `c` copies, `v` switches between real values and `{{variables}}` |
 | `Ctrl+O` | Import: paste cURL command(s), or give the path of a Postman export |
 | `Tab` / `Shift+Tab` | Move between fields |
@@ -337,6 +359,61 @@ Every snippet is checked in the test suite by running it (Python, Node, Go and H
 The clipboard is reached through `pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux (whichever is installed), and `clip` on Windows or WSL. Over SSH, or when none of those exist, the app sends the text to your terminal with the OSC 52 escape sequence, which iTerm2, kitty, WezTerm, Alacritty, Windows Terminal and tmux (with `set -g set-clipboard on`) understand. macOS Terminal.app doesn't support OSC 52, so over SSH from Terminal.app open the window with `Ctrl+G` and select the text instead.
 
 From a terminal: `term-rest-client export -lang python "Payment Gateway/Charges/Charge"` prints the code (`-lang` takes `curl`, `python`, `javascript`, `go` or `httpie`; `-curl` is short for `-lang curl`). `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
+
+### Streaming responses (Server-Sent Events, NDJSON)
+
+A response with `Content-Type: text/event-stream` (Server-Sent Events) or an NDJSON type (`application/x-ndjson`, `application/jsonl`, ...) is shown as it arrives. The pane says **● Streaming**, counts the events, and lists each one with the time it arrived after the request started, its event type and id, and its data (JSON is highlighted):
+
+```
+● Streaming Server-Sent Events · 3 events so far  (Esc to stop)
+
+▾ Events (3)  · s saves the raw stream
+  +0.012s progress #1  {"step":1,"status":"queued"}
+  +0.214s progress #2  {"step":2,"status":"building"}
+  +0.415s progress #3  {"step":3,"status":"testing"}
+```
+
+- The request timeout only covers the wait for the response headers, so a stream can run as long as the server keeps it open.
+- `Esc` stops the stream. Everything that arrived is kept, the tests run on it, and it goes into History like any response.
+- Tests can use `events` and `event[i]` (see [Tests](#tests)).
+- On the command line, `run` follows a stream until it ends or `-stream` runs out (the timeout setting by default), then stops it and runs the tests: `term-rest-client run -stream 10s "API Types/Live events (SSE)"`.
+
+The sample **API Types / Live events (SSE)** request follows Wikimedia's public stream of edits to Wikipedia, which never ends, so press `Esc` when you've seen enough.
+
+### GraphQL
+
+Choose **GraphQL** as the body type. The Body tab splits into a **Query** editor and a **Variables** editor (a JSON object), and the request is sent as `{"query": ..., "variables": ...}` with `Content-Type: application/json`. A GET request sends both in the URL instead, as GraphQL over HTTP describes. `{{variables}}` work in both editors.
+
+Press `F6` to browse the server's schema. The app sends an introspection query to the URL, with the request's headers and auth, and lists the query, mutation and subscription fields with their arguments and types. `→` shows the fields of a field's type. `Enter` on a top-level field writes a query for it, with a variable for each argument and the result's fields already selected:
+
+```graphql
+query Country($code: ID!) {
+  country(code: $code) {
+    code
+    name
+    capital
+    currency
+    continent {
+      code
+      name
+    }
+  }
+}
+```
+
+Fill in the variables and send. `r` in the browser reloads the schema. Postman collections with GraphQL bodies import and export as GraphQL, and pasting a curl command whose body is a GraphQL query turns it into one. Try the sample **API Types / Country (GraphQL)**, which uses the public countries API.
+
+### WebSocket
+
+Pick **WS** in the method dropdown and enter a `ws://` or `wss://` URL (`http(s)://` works too). Params, Headers and Auth go into the handshake, and the Body tab becomes the message to send.
+
+- `Ctrl+R` (or the **CONNECT** button) connects. After that, `Ctrl+R` (**SEND**) sends the Body tab as a text message, with `{{variables}}` filled in. Edit and send as often as you like.
+- The response pane is a live log: `↑` for sent and `↓` for received messages, each with its time, plus the handshake's request and response headers.
+- `Esc` disconnects. When the connection ends, whether you closed it or the server did, the tests run on the received messages: `events`, `event[i]`, and `body` (the last message).
+- On the command line, `run` connects, sends the message, and collects replies until the server closes, `-stream` runs out, or a second passes with nothing new. Then it runs the tests, so WebSocket checks fit in CI.
+- `Ctrl+G` shows WebSocket requests as JavaScript (`WebSocket`, Node 22 or a browser), Python (`websockets`), Go (`coder/websocket`), or a `websocat` command in the cURL tab.
+
+Postman keeps WebSocket requests outside its collection format, so exporting a folder to Postman leaves them out and says so. The sample **API Types / Echo (WebSocket)** talks to Postman's public echo server.
 
 ### Importing from Postman
 
@@ -491,7 +568,16 @@ json.error !exists
 set token = json.token            # capture a value into a variable
 ```
 
-Subjects: `status`, `time`, `size`, `body`, `header <Name>`, `json.<path>`. Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `matches` (regular expression), `exists`, and the negations `!contains`, `!matches`, `!exists`. Numbers compare numerically (`1.50 == 1.5`), everything else as text. The expected value may use `{{variables}}`.
+For streams and WebSockets there are two more subjects: `events` is the number of events (or received messages), and `event[i]` is one of them, counting from 0, with `event[-1]` the last. Add `.json.path` to look inside a JSON event:
+
+```
+events >= 3
+event[0].json.status == queued
+event[-1].json.done == true
+event[1] contains "tick"
+```
+
+Subjects: `status`, `time`, `size`, `body`, `header <Name>`, `json.<path>`, `events`, `event[i]`. Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `matches` (regular expression), `exists`, and the negations `!contains`, `!matches`, `!exists`. Numbers compare numerically (`1.50 == 1.5`), everything else as text. The expected value may use `{{variables}}`.
 
 ## Command-line mode
 
@@ -503,7 +589,8 @@ term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in 
 term-rest-client run "Health Check"                     # a top-level request
 term-rest-client run -env Local "User Service"          # use a different environment for this run
 term-rest-client env                                    # list environments (* marks the active one)
-term-rest-client env Staging                            # switch the active environment ("none" for Globals only)
+term-rest-client env Staging                            # switch the active environment ("none" or "global" for Globals only)
+term-rest-client demo                                   # local demo server for the sample workspace's Local environment
 term-rest-client history -n 10                          # the last 10 requests sent from the app
 term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
 term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
@@ -513,7 +600,7 @@ term-rest-client export -lang go "Auth API/Login"        # or as python, javascr
 term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
-Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it).
+Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them, and a path that matches nothing gets suggestions. The examples above use the sample workspace; see [Try it with the samples](#try-it-with-the-samples) to run them as they are. `-env none` (or `-env global`) uses the global variables only. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it). `-stream DURATION` sets how long streams and WebSockets are followed (the timeout setting by default); see [Streaming responses](#streaming-responses-server-sent-events-ndjson) and [WebSocket](#websocket).
 
 ## Where data is stored
 
@@ -536,14 +623,17 @@ cli-rest-client/
 │   ├── cli/                # headless "list" and "run" commands
 │   ├── clipboard/          # copy text via pbcopy, wl-copy, xclip, xsel, clip or OSC 52
 │   ├── codegen/            # request → curl, Python, JavaScript, Go and HTTPie code
+│   ├── graphql/            # schema introspection and query skeletons for the schema browser
 │   ├── engine/             # builds http.Request from a saved request + variables, cURL export
 │   ├── models/             # workspace, collection and request types
 │   ├── script/             # pre-request and test script interpreter
 │   ├── storage/            # workspace file load/save, sample workspace
-│   ├── testutil/           # local httpbin clone used by tests
+│   ├── demoserver/         # local httpbin-like API with SSE, GraphQL and WebSocket (tests and `demo`)
+│   ├── testutil/           # starts the demo server for tests
 │   ├── ui/                 # terminal UI (tview)
 │   └── vars/               # {{variable}} substitution
-├── pkg/httpclient/         # HTTP client with timing, redirects, TLS and cancel support
+├── pkg/httpclient/         # HTTP client with timing, redirects, TLS, cancel and live streams (SSE, NDJSON)
+├── pkg/wsclient/           # WebSocket connections
 ├── install.sh              # build and install to your PATH (macOS/Linux)
 ├── Makefile                # make build / install / uninstall / test
 └── docs/
@@ -571,9 +661,7 @@ The UI tests drive the real application through tcell's simulation screen (typin
 
 ## Roadmap
 
-- Request history
-- Multiple named environments
-- Import from Postman collections and cURL
+- Socket.IO, gRPC (with server reflection) and MQTT requests
 - OAuth 2.0 helpers
 - Proxy settings in the UI (the `HTTPS_PROXY` / `HTTP_PROXY` environment variables already work)
 
