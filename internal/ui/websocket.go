@@ -42,7 +42,7 @@ func (s *wsSession) counts() (sent, received int) {
 	return
 }
 
-// wsSend connects, or sends the Body tab's message when connected.
+// wsSend connects, or sends the Message tab's message when connected.
 func (a *App) wsSend() {
 	if s := a.wsSession(); s.open() {
 		a.wsSendMessage(s)
@@ -116,7 +116,7 @@ func (a *App) wsSend() {
 			}
 			sess.conn, sess.handshake = conn, hs
 			sess.started = time.Now()
-			a.setStatus(levelSuccess, "Connected. Ctrl+R sends the message in the Body tab, Esc disconnects")
+			a.setStatus(levelSuccess, "Connected. Ctrl+R sends the message in the Message tab, Esc disconnects")
 			a.renderResponse()
 			a.renderTitles()
 			go a.wsReadLoop(ctx, res, sess)
@@ -139,7 +139,7 @@ func (a *App) wsSendMessage(s *wsSession) {
 		return
 	}
 	if p.Message == "" {
-		a.setStatus(levelWarning, "Write a message in the Body tab first")
+		a.setStatus(levelWarning, "Write a message in the Message tab first")
 		return
 	}
 	m, err := s.conn.Send(context.Background(), p.Message)
@@ -247,7 +247,7 @@ func (a *App) renderWebSocket(res *sendResult, line func(string, ...any), sectio
 		a.response.SetTitle(" WebSocket ")
 		return
 	case s.open():
-		line("[%s::b]● Connected[-:-:-] [%s]%s · ↑ %d sent · ↓ %d received  [%s](Ctrl+R sends the Body tab, Esc disconnects)",
+		line("[%s::b]● Connected[-:-:-] [%s]%s · ↑ %d sent · ↓ %d received  [%s](Ctrl+R sends the Message tab, Esc disconnects)",
 			t.HexSuccess, t.HexText, streamDuration(time.Since(s.started)), sent, received, t.HexMuted)
 		a.response.SetTitle(fmt.Sprintf(" WebSocket · [%s]open[-] ", t.HexSuccess))
 	default:

@@ -74,6 +74,9 @@ type App struct {
 	paramsArea, headersArea, bodyArea, preArea, testsArea, varsArea *tview.TextArea
 	gqlVarsArea                                                     *tview.TextArea
 	bodyEditors                                                     *tview.Flex
+	bodyPage                                                        *tview.Flex // Body tab: type row, editors, hint
+	bodyTypeRow                                                     tview.Primitive
+	wsMessageNote                                                   *tview.TextView // replaces the type row for WebSocket
 	schemas                                                         map[string]*graphql.Schema // fetched GraphQL schemas by URL
 	varsTarget                                                      *tview.DropDown
 	envButtons                                                      []*tview.Button

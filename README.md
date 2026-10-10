@@ -488,7 +488,7 @@ Fill in the variables and send. `r` in the browser reloads the schema, `Esc` clo
 
 Pick **WS** in the method dropdown and enter a `ws://` or `wss://` URL (`http(s)://` works too). Params, Headers and Auth go into the handshake, and the Body tab becomes the message to send.
 
-- `Ctrl+R` (or the **CONNECT** button) connects. After that, `Ctrl+R` (**SEND**) sends the Body tab as a text message, with `{{variables}}` filled in. Edit and send as often as you like.
+- `Ctrl+R` (or the **CONNECT** button) connects. After that, `Ctrl+R` (**SEND**) sends the Message tab as a text message, with `{{variables}}` filled in. For a WebSocket request the Body tab is called **Message** and has no body type: whatever you type (plain text or JSON) is sent as it is. Edit and send as often as you like.
 - The response pane is a live log: `↑` for sent and `↓` for received messages, each with its time, plus the handshake's request and response headers.
 - `Esc` disconnects. When the connection ends, whether you closed it or the server did, the tests run on the received messages: `events`, `event[i]`, and `body` (the last message).
 - On the command line, `run` connects, sends the message, and collects replies until the server closes, `-stream` runs out, or a second passes with nothing new. Then it runs the tests, so WebSocket checks fit in CI.

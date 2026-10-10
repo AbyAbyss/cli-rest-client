@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and on making Option work as Alt in Terminal.app and iTerm2.
 
 ### Changed
+- For a WebSocket request the Body tab is now called Message and drops the HTTP body
+  type picker (JSON, Form, ...), which never applied to messages. A note says the text
+  is sent as is when the connection opens, and the example shows plain text or JSON.
 - The GraphQL schema browser has a Details pane (description, arguments, the result
   type's fields, and the query it would write). `Enter`, `Space` and clicks now open and
   close fields instead of replacing the query, and `i` inserts the query, also from

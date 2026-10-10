@@ -20,7 +20,7 @@ import (
 type socketIn struct {
 	Type    string         `json:"type"` // connect, send, close
 	Request models.Request `json:"request"`
-	Message string         `json:"message"` // send: the Body tab, {{variables}} resolved here
+	Message string         `json:"message"` // send: the composer's text, {{variables}} resolved here
 }
 
 // socket bridges the page to a WebSocket server. The page opens

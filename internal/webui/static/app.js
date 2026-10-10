@@ -1063,8 +1063,8 @@ function bodyEditor(tab) {
 function wsMessageEditor(tab) {
   const r = tab.req;
   return h("div", { style: { display: "flex", flexDirection: "column", gap: "12px", flex: 1 } },
-    h("div", { class: "help" }, "This message is sent as soon as the connection opens (leave it empty to send nothing). After connecting, type more messages in the composer under the response."),
-    textArea(r.body, (v) => { r.body = v; r.body_type = v ? "text" : "none"; changed(tab); }, { id: "bodyText", placeholder: '{"type": "subscribe", "channel": "ticker"}' }));
+    h("div", { class: "help" }, "Sent as a text message as soon as the connection opens. Any text works, JSON is just common. Leave it empty to send nothing; after connecting, type more in the composer under the response."),
+    textArea(r.body, (v) => { r.body = v; r.body_type = v ? "text" : "none"; changed(tab); }, { id: "bodyText", placeholder: 'Optional. Plain text or JSON, for example:\n\nhello\n\n{"type": "subscribe", "channel": "{{channel}}"}' }));
 }
 function scriptEditor(tab, key, placeholder, snippets) {
   const r = tab.req;
