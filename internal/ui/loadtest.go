@@ -264,8 +264,10 @@ func (a *App) renderLoad(v *loadView) {
 		rps = append(rps, float64(pt.Requests))
 		p95 = append(p95, float64(pt.P95))
 	}
+	// A blank line between rows keeps the sparklines apart: full-height
+	// blocks on adjacent lines run together.
 	row := func(label, value, spark string) {
-		fmt.Fprintf(&b, "[%s]%-15s[%s::b]%-14s[-:-:-] [%s]%s[-]\n", muted, label, text, value, accent, spark)
+		fmt.Fprintf(&b, "[%s]%-15s[%s::b]%-14s[-:-:-] [%s]%s[-]\n\n", muted, label, text, value, accent, spark)
 	}
 	who := "Virtual users"
 	whoVal := fmt.Sprintf("%d / %.0f", p.VUs, p.Target)

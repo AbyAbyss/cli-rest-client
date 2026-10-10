@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Load testing: `term-rest-client load`, `Alt+L` / `F7` and `l` in the terminal app, and a
+  Load test dialog in the browser UI. Virtual users run a request, or a folder's requests
+  in order, each with its own variables (a captured login token stays with its user).
+  Constant users (`-vus`, `-duration`), ramping stages (`-stages 30s:50,1m:50,30s:0`), or
+  a fixed or ramping request rate (`-rate 200/s`, `/s` stage targets) where arrivals with
+  no free user are dropped and counted. Results: requests/s, failed requests, latency
+  p50/p90/p95/p99 overall and per request, status codes, error reasons, bytes, a
+  per-second timeline, and tests as checks. `-threshold "p95<300ms,errors<1%"` sets the
+  exit code; `-out` writes JSON or CSV. Live sparklines in the terminal, live charts in
+  the browser. Hosts other than this machine or a private network need confirming
+  (`-yes` without a terminal).
+- The demo server has `/slow`, `/flaky` and `/status/{code}` for trying load tests.
+
+### Fixed
+- The browser UI didn't show requests at the top level (outside any collection), such as
+  the sample's Health Check.
+
+### Added
 - `term-rest-client -gui`: a browser interface on the same workspace, embedded in the
   binary (about 370 KB). Requests run in the Go process, so there's no CORS. It has
   request tabs, the collections tree, variables and environments, live streams, a
