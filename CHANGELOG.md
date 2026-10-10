@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `term-rest-client -gui`: a browser interface on the same workspace, embedded in the
+  binary (about 370 KB). Requests run in the Go process, so there's no CORS. It has
+  request tabs, the collections tree, variables and environments, live streams, a
+  WebSocket log and composer, the GraphQL schema browser, a JSON tree view, history,
+  code snippets, cURL and Postman import, a command palette, and light and dark themes.
+  It listens on 127.0.0.1 on a free port by default; `-port` asks for a port (a busy one
+  falls back to a free one), `-lan` also listens on the network and prints a link per
+  address, and `-no-open` doesn't start a browser. A per-run key, a SameSite cookie and
+  Host and Origin checks keep other sites from using it.
 - Copy from the response pane: `c` copies the body; `y` opens a menu with the body raw or
   as pretty JSON, response and request headers as text or JSON, the full response (like
   `curl -i`), and stream events or WebSocket messages as JSON.

@@ -28,12 +28,18 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
+- **Browser interface**: `term-rest-client -gui` opens the same workspace in your browser, with tabs, a collections tree, live streams, WebSockets, a GraphQL schema browser, a JSON tree, history and a command palette (`Ctrl+K`). Requests still run in the term-rest-client process, so there's no CORS, and it's all inside the one binary.
 - **Headless mode**: `term-rest-client run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
 
 ## Screenshots
 
+![Browser interface streaming Server-Sent Events](assets/screenshots/gui.png)
+**`term-rest-client -gui`**: the browser interface, here following a Server-Sent Events stream live
+
 | | |
 |---|---|
+| ![Browser interface, light theme, GraphQL response as a tree](assets/screenshots/gui-light.png) | ![Browser interface WebSocket log](assets/screenshots/gui-websocket.png) |
+| **Browser interface, light theme**: a GraphQL query with its response as a collapsible tree | **Browser interface, WebSocket**: send messages from the composer and watch the log |
 | ![Query params with variables](assets/screenshots/params.png) | ![Bearer token auth](assets/screenshots/auth.png) |
 | **Query params and headers** with `{{variables}}` and a generated `{{$uuid}}` | **Auth tab**: Basic, Bearer or API key |
 | ![Pre-request script and tests](assets/screenshots/tests.png) | ![Save request dialog](assets/screenshots/save.png) |
@@ -231,6 +237,45 @@ Public services work too, if you'd rather test against the internet:
 On first start the workspace contains sample collections that call [httpbin.org](https://httpbin.org). Open one, press `Ctrl+R`, and you'll see the response and test results.
 
 See [QUICKSTART.md](QUICKSTART.md) and [docs/BUILD.md](docs/BUILD.md) for more build options.
+
+## Browser interface
+
+```bash
+term-rest-client -gui                 # opens your browser on a free port
+term-rest-client -gui -port 7300      # a port of your choice; a busy port falls back to a free one
+term-rest-client -gui -lan            # also reachable from other devices on your network
+term-rest-client -gui -no-open        # print the link without opening a browser
+```
+
+It prints where it's listening and opens the first link:
+
+```
+  term-rest-client GUI is running
+
+  Local:   http://localhost:51234/?t=6f1c...
+           http://127.0.0.1:51234/?t=6f1c...
+  Network: use -lan to open it from other devices
+```
+
+With `-lan`, the Network line lists a link for each of the machine's addresses (for example `http://192.168.1.20:51234/?t=...`). If the port you asked for is taken, a note says so and a free one is used.
+
+The page works on the same workspace file as the terminal app, so collections, environments, settings and history are shared. Edits are saved as you make them; a request's own changes are saved with `Ctrl+S` (`⌘S`), as in the terminal.
+
+Every request is sent by the term-rest-client process, not by the browser. That means no CORS errors, no preflight requests and no headers the browser adds on its own, and streams, WebSockets, pre-request scripts, tests and captured variables behave exactly as they do in the terminal.
+
+What's there:
+
+- **Tabs** for open requests, with an unsaved-changes dot, and a **collections tree** with folders, rename, duplicate, delete, export to Postman and "Run all requests" for a folder.
+- A **URL bar** that highlights `{{variables}}` (red when undefined). Pasting a curl command into it fills in the whole request.
+- **Params, Headers, Auth, Body, Pre-request and Tests** tabs. Bodies can be JSON (with a validity check and Prettify), text, XML, form fields or GraphQL with a schema browser.
+- **Responses** with status, time and size, Pretty / Tree / Raw views, find in body, an HTML and image preview, request and response headers, and test results. A Copy menu copies the body, headers as text or JSON, the full response or the request as cURL; you can also download the body.
+- **Streams** shown event by event as they arrive, and a **WebSocket** message log with a composer. Stop (or `Esc`) keeps what arrived and still runs the tests.
+- **Variables**: Globals and environments, the environment picker, and **History** grouped by day.
+- **Code snippets** in curl, Python, JavaScript, Go and HTTPie; import of cURL and Postman (paste, pick a file, or drop it on the window); a **command palette** (`Ctrl+K` / `⌘K`) to jump to any request or action; light and dark themes; a side-by-side or stacked layout with a draggable divider.
+
+Shortcuts: `Ctrl+Enter` sends, `Ctrl+S` saves, `Ctrl+K` searches, `Ctrl+Alt+N` opens a new tab, `Esc` stops a request or closes a dialog. On a Mac use `⌘` instead of `Ctrl`.
+
+**Security.** By default the server listens on 127.0.0.1 only. The printed link carries a random key that changes on every start; the page keeps it in an HttpOnly, SameSite=Strict cookie, and the server also checks the Host and Origin headers, so other websites open in your browser can't use it to send requests. With `-lan`, anyone on your network who has the link can send requests from your machine, so only share it with devices you trust. The page loads nothing from the internet.
 
 ## Using the app
 
@@ -664,6 +709,7 @@ cli-rest-client/
 │   ├── models/             # workspace, collection and request types
 │   ├── script/             # pre-request and test script interpreter
 │   ├── storage/            # workspace file load/save, sample workspace
+│   ├── webui/              # the -gui browser interface: HTTP API, WebSocket bridge, embedded page
 │   ├── demoserver/         # local httpbin-like API with SSE, GraphQL and WebSocket (tests and `demo`)
 │   ├── testutil/           # starts the demo server for tests
 │   ├── ui/                 # terminal UI (tview)
