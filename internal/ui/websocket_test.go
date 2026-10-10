@@ -123,3 +123,31 @@ func TestWebSocketServerCloseAndErrors(t *testing.T) {
 		t.Fatalf("tree label:\n%s", s)
 	}
 }
+
+func TestWebSocketMessageTab(t *testing.T) {
+	h := start(t, nil)
+	r := models.NewRequest("Socket")
+	r.Type, r.URL = models.TypeWebSocket, "ws://localhost:1/ws"
+	h.do(func() {
+		h.a.loadIntoBuilder(r, nil)
+		h.a.switchTab(3)
+	})
+	s := h.screenText()
+	for _, want := range []string{"4 Message", "Sent as a text message when the connection opens", "Plain text or JSON"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("WebSocket body tab missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Body type") || strings.Contains(s, "4 Body") {
+		t.Fatalf("WebSocket shouldn't show the HTTP body picker:\n%s", s)
+	}
+	// Back to HTTP: the picker and the Body name return.
+	h.do(func() {
+		r.Type, r.Method = models.TypeHTTP, "POST"
+		h.a.loadIntoBuilder(r, nil)
+	})
+	s = h.screenText()
+	if !strings.Contains(s, "Body type") || !strings.Contains(s, "4 Body") || strings.Contains(s, "Sent as a text message") {
+		t.Fatalf("HTTP body tab:\n%s", s)
+	}
+}

@@ -207,7 +207,7 @@ func (a *App) renderTabBar() {
 	if a.req.Auth.Type != models.AuthNone {
 		badge["Auth"] = " •"
 	}
-	if a.req.BodyType != models.BodyNone {
+	if a.req.BodyType != models.BodyNone || (a.req.Type == models.TypeWebSocket && a.req.Body != "") {
 		badge["Body"] = " •"
 	}
 	if strings.TrimSpace(a.req.PreRequest) != "" {
@@ -219,7 +219,11 @@ func (a *App) renderTabBar() {
 
 	var sb strings.Builder
 	for i, t := range a.tabs {
-		label := fmt.Sprintf(" %d %s%s ", i+1, t.name, badge[t.name])
+		name := t.name
+		if name == "Body" && a.req.Type == models.TypeWebSocket {
+			name = "Message"
+		}
+		label := fmt.Sprintf(" %d %s%s ", i+1, name, badge[t.name])
 		if i == a.activeTab {
 			fmt.Fprintf(&sb, `["tab%d"][%s:%s:b]%s[-:-:-][""]`, i, a.theme.HexText, hexOf(a.theme.Selection), label)
 		} else {
@@ -379,9 +383,14 @@ func (a *App) buildBodyTab() *tab {
 		a.requestChanged()
 	})
 	a.bodyEditors = a.newFlex(tview.FlexColumn)
-	a.layoutBody()
+	a.bodyTypeRow = a.bodyType
+	// A WebSocket message has no body type: it's sent as a text frame as it is.
+	a.wsMessageNote = a.newHint(func(t *Theme) string {
+		return fmt.Sprintf("[%s]Sent as a text message when the connection opens. Any text works; JSON is common.", t.HexMuted)
+	})
 	page := a.newFlex(tview.FlexRow).
 		AddItem(a.bodyType, 1, 0, false).
+		AddItem(a.wsMessageNote, 0, 0, false).
 		AddItem(a.bodyEditors, 0, 1, false).
 		AddItem(a.newHint(func(t *Theme) string {
 			if a.req.Type == models.TypeWebSocket {
@@ -392,7 +401,12 @@ func (a *App) buildBodyTab() *tab {
 			}
 			return hintLine(t, "Ctrl+P formats JSON", "Form: key=value per line", "{{var}} allowed")
 		}), 2, 0, false)
+	a.bodyPage = page
+	a.layoutBody()
 	return &tab{name: "Body", page: page, focus: func() []tview.Primitive {
+		if a.req.Type == models.TypeWebSocket {
+			return []tview.Primitive{a.bodyArea}
+		}
 		if a.req.BodyType == models.BodyGraphQL {
 			return []tview.Primitive{a.bodyType, a.bodyArea, a.gqlVarsArea}
 		}
@@ -410,10 +424,23 @@ func (a *App) layoutBody() {
 		return
 	}
 	focused := a.tv.GetFocus()
+	if a.bodyPage != nil {
+		// The first row is the body type picker; WebSocket shows a note instead.
+		ws := a.req.Type == models.TypeWebSocket
+		pick, note := 1, 0
+		if ws {
+			pick, note = 0, 1
+		}
+		a.bodyPage.ResizeItem(a.bodyTypeRow, pick, 0)
+		a.bodyPage.ResizeItem(a.wsMessageNote, note, 0)
+		if ws && focused == a.bodyType {
+			a.tv.SetFocus(a.bodyArea)
+		}
+	}
 	// The example text shown in an empty editor matches what goes there.
 	switch {
 	case a.req.Type == models.TypeWebSocket:
-		a.bodyArea.SetPlaceholder("Message to send when connected, for example:\n{\n  \"type\": \"subscribe\",\n  \"channel\": \"{{channel}}\"\n}")
+		a.bodyArea.SetPlaceholder("The message to send once connected (optional).\nPlain text or JSON, for example:\n\nhello\n\n{\n  \"type\": \"subscribe\",\n  \"channel\": \"{{channel}}\"\n}\n\nAfter connecting, edit it and press Ctrl+R to send again.")
 	case a.req.BodyType == models.BodyGraphQL:
 		a.bodyArea.SetPlaceholder("Type a GraphQL query here, or press Ctrl+T to pick a\nfield from the schema and have the query written for you.\n\nFor example:\nquery {\n  countries {\n    code\n    name\n  }\n}")
 	default:

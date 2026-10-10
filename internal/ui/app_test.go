@@ -1177,7 +1177,10 @@ func TestExportToPostmanUI(t *testing.T) {
 // paste sends text as a bracketed paste, like a terminal does.
 func (h *harness) paste(text string) {
 	h.t.Helper()
-	h.screen.PostEvent(tcell.NewEventPaste(true))
+	// PostEventWait, not PostEvent: PostEvent drops the event when the queue
+	// is full, which a long paste on a slow machine (CI with -race) fills,
+	// and a lost paste end leaves the app waiting for the rest of the paste.
+	h.screen.PostEventWait(tcell.NewEventPaste(true))
 	for _, r := range text {
 		if r == '\n' {
 			h.screen.InjectKey(tcell.KeyEnter, 0, 0)
@@ -1185,7 +1188,7 @@ func (h *harness) paste(text string) {
 			h.screen.InjectKey(tcell.KeyRune, r, 0)
 		}
 	}
-	h.screen.PostEvent(tcell.NewEventPaste(false))
+	h.screen.PostEventWait(tcell.NewEventPaste(false))
 }
 
 func TestCurlImportUI(t *testing.T) {
