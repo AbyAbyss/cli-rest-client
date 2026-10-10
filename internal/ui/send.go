@@ -48,8 +48,15 @@ func (a *App) buildResponse() {
 		if ev.Key() != tcell.KeyRune || ev.Modifiers() != 0 {
 			return ev
 		}
-		if ev.Rune() == 's' {
+		switch ev.Rune() {
+		case 's':
 			a.saveResponseBody()
+			return nil
+		case 'c':
+			a.copyResponseBody()
+			return nil
+		case 'y':
+			a.showCopyMenu()
 			return nil
 		}
 		for _, sec := range responseSections {
@@ -552,10 +559,10 @@ func (a *App) renderResponse() {
 		}
 		switch {
 		case r.Stream != "":
-			if section(secBody, "Events", fmt.Sprintf("[%s](%d)  · s saves the raw stream", t.HexMuted, len(r.Events))) {
+			if section(secBody, "Events", fmt.Sprintf("[%s](%d)  · y copy · s saves the raw stream", t.HexMuted, len(r.Events))) {
 				writeEvents(line, r.Events, t)
 			}
-		case section(secBody, "Body", fmt.Sprintf("[%s]%s  · s to save", t.HexMuted, size)):
+		case section(secBody, "Body", fmt.Sprintf("[%s]%s  · c copy · y more · s save", t.HexMuted, size)):
 			body, _ := prettyBody(r.Body, r.Headers.Get("Content-Type"), t)
 			sb.WriteString("[" + t.HexText + "]")
 			sb.WriteString(body)
