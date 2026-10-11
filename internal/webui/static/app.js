@@ -38,6 +38,12 @@ function append(el, kids) {
     else el.append(k instanceof Node ? k : String(k));
   }
 }
+// fill replaces el's children. Unlike el.replaceChildren, it flattens
+// arrays (a list built with .map), which the DOM method would stringify.
+function fill(el, ...kids) {
+  el.replaceChildren();
+  append(el, kids);
+}
 const $ = (id) => document.getElementById(id);
 const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -803,7 +809,7 @@ function envDialog(focusName) {
   const list = h("div", { class: "env-list" });
   const right = h("div", { style: { display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 } });
   const draw = () => {
-    list.replaceChildren(
+    fill(list,
       h("div", { class: "env-item" + (sel === null ? " sel" : ""), onclick: () => { sel = null; draw(); } }, icon("globe"), "Globals"),
       h("div", { class: "hist-day" }, "Environments"),
       (S.ws.environments || []).map((e) => h("div", { class: "env-item" + (sel === e.name ? " sel" : ""), onclick: () => { sel = e.name; draw(); } },
