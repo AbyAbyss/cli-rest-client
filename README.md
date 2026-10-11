@@ -1,6 +1,8 @@
 # Term REST Client
 
-A terminal REST API client written in Go with [tview](https://github.com/rivo/tview). Build requests, organise them into collections, use variables, script simple pre-request steps and response tests, all without leaving the terminal. Saved requests can also be run from the command line, which makes them usable in CI.
+An open-source REST API client for the terminal and the browser, written in Go with [tview](https://github.com/rivo/tview). Build requests, organise them into collections, use variables, script simple pre-request steps and response tests, all without leaving the terminal. Saved requests can also be run from the command line, which makes them usable in CI. It also speaks GraphQL, streaming responses (SSE, NDJSON) and WebSockets, and can load test your APIs.
+
+Website: **https://abyabyss.github.io/term-rest-client.html**
 
 The command is `rest`: `rest` opens the app, `rest -gui` opens it in your browser, and `rest run`, `rest load` and the rest work from scripts. (Before v0.6.0 it was called `term-rest-client`; the installers keep that name working as a link to `rest`.)
 
