@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-11
+
 ### Changed
 - The command is now `rest` instead of `term-rest-client`: `rest`, `rest -gui`,
   `rest run`, `rest load` and so on. The installers (`get.sh`, `make install`) install
@@ -16,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rest-<os>-<arch>.tar.gz` (`rest.exe` in the Windows zip), and `go install` takes
   `.../cmd/rest@latest`. The product name, the data folder (`term-rest-client`) and
   `TERM_REST_CLIENT_DATA` are unchanged, so existing workspaces are found as before.
+
+## [0.5.1] - 2026-10-10
 
 ### Fixed
 - Browser UI: the Variables dialog listed environments as
@@ -201,7 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/AbyAbyss/cli-rest-client/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.6.0
+[0.5.1]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.5.1
 [0.5.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.5.0
 [0.4.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.4.0
 [0.3.0]: https://github.com/AbyAbyss/cli-rest-client/releases/tag/v0.3.0
