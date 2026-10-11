@@ -42,12 +42,12 @@ func Load(ctx context.Context, in io.Reader, out, errOut io.Writer, ws *models.W
 	fs.Var(overrides, "set", "override a variable for this run (name=value, repeatable)")
 	envName := fs.String("env", "", "environment to use (default: the active one; \"none\" for globals only)")
 	fs.Usage = func() {
-		fmt.Fprintf(errOut, "Usage: term-rest-client load [flags] <Collection/Request | Collection/Folder>...\n\n")
+		fmt.Fprintf(errOut, "Usage: rest load [flags] <Collection/Request | Collection/Folder>...\n\n")
 		fmt.Fprintf(errOut, "Each virtual user runs the named requests in order, over and over, with its own\n")
 		fmt.Fprintf(errOut, "copy of the variables. Tests become checks. Examples:\n\n")
-		fmt.Fprintf(errOut, "  term-rest-client load -vus 20 -duration 1m \"Shop API/Checkout\"\n")
-		fmt.Fprintf(errOut, "  term-rest-client load -stages 30s:50,1m:50,30s:0 \"Shop API\"\n")
-		fmt.Fprintf(errOut, "  term-rest-client load -rate 200/s -duration 1m -threshold \"p95<300ms,errors<1%%\" \"Shop API/Search\"\n\nFlags:\n")
+		fmt.Fprintf(errOut, "  rest load -vus 20 -duration 1m \"Shop API/Checkout\"\n")
+		fmt.Fprintf(errOut, "  rest load -stages 30s:50,1m:50,30s:0 \"Shop API\"\n")
+		fmt.Fprintf(errOut, "  rest load -rate 200/s -duration 1m -threshold \"p95<300ms,errors<1%%\" \"Shop API/Search\"\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

@@ -45,7 +45,7 @@ cd cli-rest-client
 .\build.ps1
 
 # Run
-.\bin\term-rest-client.exe
+.\bin\rest.exe
 ```
 
 **Note:** If you get an execution policy error:
@@ -59,10 +59,10 @@ Works in any terminal:
 
 ```cmd
 # Build
-go build -o bin\term-rest-client.exe .\cmd\term-rest-client
+go build -o bin\rest.exe .\cmd\rest
 
 # Run
-bin\term-rest-client.exe
+bin\rest.exe
 ```
 
 ### Method 4: Using Make
@@ -90,10 +90,10 @@ Build for all platforms:
 ```
 
 This creates:
-- `dist/term-rest-client-windows-amd64.exe`
-- `dist/term-rest-client-linux-amd64`
-- `dist/term-rest-client-darwin-amd64`
-- `dist/term-rest-client-darwin-arm64`
+- `dist/rest-windows-amd64.exe`
+- `dist/rest-linux-amd64`
+- `dist/rest-darwin-amd64`
+- `dist/rest-darwin-arm64`
 
 ## Development Workflow
 
@@ -106,7 +106,7 @@ This creates:
 build.bat
 
 # 3. Test
-bin\term-rest-client.exe
+bin\rest.exe
 
 # Or use run.bat which builds automatically
 run.bat
@@ -115,7 +115,7 @@ run.bat
 ### Using Go Run (No Build Step)
 
 ```cmd
-go run ./cmd/term-rest-client
+go run ./cmd/rest
 ```
 
 ### Format Code
@@ -189,8 +189,8 @@ go mod tidy
 ## File Paths
 
 Windows uses backslashes (`\`) in paths:
-- Build output: `bin\term-rest-client.exe`
-- Source: `.\cmd\term-rest-client`
+- Build output: `bin\rest.exe`
+- Source: `.\cmd\rest`
 - Config: `config\config.json` (if added)
 
 ## Environment Variables
@@ -200,7 +200,7 @@ Set Go-specific variables if needed:
 ```cmd
 set GOOS=windows
 set GOARCH=amd64
-go build -o bin\term-rest-client.exe .\cmd\term-rest-client
+go build -o bin\rest.exe .\cmd\rest
 ```
 
 ## Next Steps

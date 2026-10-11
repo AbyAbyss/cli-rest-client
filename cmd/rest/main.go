@@ -1,4 +1,5 @@
-// Command term-rest-client is a terminal REST API client.
+// Command rest is term-rest-client, a terminal REST API client. It used to
+// be installed as term-rest-client; the installers keep that name as a link.
 package main
 
 import (
@@ -30,7 +31,7 @@ func main() {
 }
 
 func run(args []string) int {
-	fs := flag.NewFlagSet("term-rest-client", flag.ContinueOnError)
+	fs := flag.NewFlagSet("rest", flag.ContinueOnError)
 	dataPath := fs.String("data", "", "workspace file (default: $"+storage.EnvDataPath+" or <config dir>/term-rest-client/workspace.json)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	gui := fs.Bool("gui", false, "open the browser interface instead of the terminal one")
@@ -40,24 +41,26 @@ func run(args []string) int {
 	fs.Usage = func() {
 		out := fs.Output()
 		fmt.Fprintf(out, "Usage:\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE]                 start the interactive UI\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] -gui [-port N] [-lan] [-no-open]\n")
-		fmt.Fprintf(out, "                                                open the browser interface (requests still run here, so no CORS)\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] list            list saved requests\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
-		fmt.Fprintf(out, "                                                send saved requests and run their tests\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] env [NAME|none] list environments, or switch the active one\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] import FILE...  import Postman collections, environments, globals or curl files\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] curl [-into Collection/Folder] [-name NAME] [CURL ARGS | -]\n")
-		fmt.Fprintf(out, "                                                save a curl command as a request (stdin when no args)\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] export [-o FILE] <Collection/Folder> | -env NAME | -globals\n")
-		fmt.Fprintf(out, "                                                export to Postman format\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] export -lang LANG [-raw] <Collection/Request>...\n")
-		fmt.Fprintf(out, "                                                print requests as code: curl, python, javascript, go, httpie\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] load [-vus N -duration D | -stages 30s:50,1m:50,30s:0 | -rate 100/s]\n")
-		fmt.Fprintf(out, "                     [-threshold p95<300ms] [-out FILE] <Collection/Request>...   load test (load -h for more)\n")
-		fmt.Fprintf(out, "  term-rest-client [-data FILE] history [-n N]  show recently sent requests\n")
-		fmt.Fprintf(out, "  term-rest-client demo [-addr localhost:8080]  serve the demo API that the sample's Local environment uses\n\nFlags:\n")
+		fmt.Fprintf(out, "  rest [-data FILE]                     start the interactive UI\n")
+		fmt.Fprintf(out, "  rest [-data FILE] -gui [-port N] [-lan] [-no-open]\n")
+		fmt.Fprintf(out, "                                        open the browser interface (requests still run here, so no CORS)\n")
+		fmt.Fprintf(out, "  rest [-data FILE] list                list saved requests\n")
+		fmt.Fprintf(out, "  rest [-data FILE] run [-v] [-env NAME] [-set name=value]... <Collection/Request>...\n")
+		fmt.Fprintf(out, "                                        send saved requests and run their tests\n")
+		fmt.Fprintf(out, "  rest [-data FILE] env [NAME|none]     list environments, or switch the active one\n")
+		fmt.Fprintf(out, "  rest [-data FILE] import FILE...      import Postman collections, environments, globals or curl files\n")
+		fmt.Fprintf(out, "  rest [-data FILE] curl [-into Collection/Folder] [-name NAME] [CURL ARGS | -]\n")
+		fmt.Fprintf(out, "                                        save a curl command as a request (stdin when no args)\n")
+		fmt.Fprintf(out, "  rest [-data FILE] export [-o FILE] <Collection/Folder> | -env NAME | -globals\n")
+		fmt.Fprintf(out, "                                        export to Postman format\n")
+		fmt.Fprintf(out, "  rest [-data FILE] export -lang LANG [-raw] <Collection/Request>...\n")
+		fmt.Fprintf(out, "                                        print requests as code: curl, python, javascript, go, httpie\n")
+		fmt.Fprintf(out, "  rest [-data FILE] load [-vus N -duration D | -stages 30s:50,1m:50,30s:0 | -rate 100/s]\n")
+		fmt.Fprintf(out, "                    [-threshold p95<300ms] [-out FILE] <Collection/Request>...\n")
+		fmt.Fprintf(out, "                                        load test (rest load -h for more)\n")
+		fmt.Fprintf(out, "  rest [-data FILE] history [-n N]      show recently sent requests\n")
+		fmt.Fprintf(out, "  rest demo [-addr localhost:8080]      serve the demo API that the sample's Local environment uses\n\n")
+		fmt.Fprintf(out, "Before v0.6.0 this command was called term-rest-client; that name still works.\n\nFlags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

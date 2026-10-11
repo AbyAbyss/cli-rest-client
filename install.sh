@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build term-rest-client and install it on your PATH (macOS and Linux).
+# Build term-rest-client and install it on your PATH as `rest` (macOS and Linux).
+# The old command name, term-rest-client, is kept as a link to rest.
 #
 #   ./install.sh              build and install
 #   ./install.sh uninstall    remove the installed binary
@@ -14,8 +15,9 @@
 
 set -euo pipefail
 
-APP_NAME="term-rest-client"
-CMD_DIR="./cmd/term-rest-client"
+APP_NAME="rest"
+OLD_NAME="term-rest-client" # the command name before v0.6.0
+CMD_DIR="./cmd/rest"
 
 cd "$(dirname "$0")"
 
@@ -110,21 +112,25 @@ install_app() {
         -o "bin/$APP_NAME" "$CMD_DIR"
 
     info "Installing to $dir"
-    if mkdir -p "$dir" 2>/dev/null && [ -w "$dir" ]; then
-        install -m 0755 "bin/$APP_NAME" "$dir/$APP_NAME"
-    else
+    local sudo=""
+    if ! { mkdir -p "$dir" 2>/dev/null && [ -w "$dir" ]; }; then
         command -v sudo >/dev/null 2>&1 || fail "$dir is not writable; choose another with INSTALL_DIR=..."
         info "$dir needs admin rights, using sudo for the copy"
-        sudo mkdir -p "$dir"
-        sudo install -m 0755 "bin/$APP_NAME" "$dir/$APP_NAME"
+        sudo="sudo"
+        $sudo mkdir -p "$dir"
     fi
+    $sudo install -m 0755 "bin/$APP_NAME" "$dir/$APP_NAME"
+    # term-rest-client keeps working: a link to rest (replacing an older copy).
+    $sudo rm -f "$dir/$OLD_NAME"
+    $sudo ln -s "$APP_NAME" "$dir/$OLD_NAME"
 
-    ok "Installed $dir/$APP_NAME"
+    ok "Installed $dir/$APP_NAME (and $OLD_NAME, a link to it)"
     if on_path "$dir"; then
         echo
         echo "  Run it from any terminal:"
         echo
         echo "    $APP_NAME              # open the REST client"
+        echo "    $APP_NAME -gui         # open it in your browser"
         echo "    $APP_NAME list         # list saved requests"
         echo "    $APP_NAME -version"
         echo
@@ -140,15 +146,17 @@ uninstall_app() {
     fi
     for dir in "${INSTALL_DIR:-}" /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin" "$gopath_bin"; do
         [ -n "$dir" ] || continue
-        if [ -f "$dir/$APP_NAME" ]; then
-            if [ -w "$dir" ]; then
-                rm -f "$dir/$APP_NAME"
-            else
-                sudo rm -f "$dir/$APP_NAME" || fail "cannot remove $dir/$APP_NAME"
+        for name in "$APP_NAME" "$OLD_NAME"; do
+            if [ -f "$dir/$name" ] || [ -L "$dir/$name" ]; then
+                if [ -w "$dir" ]; then
+                    rm -f "$dir/$name"
+                else
+                    sudo rm -f "$dir/$name" || fail "cannot remove $dir/$name"
+                fi
+                ok "Removed $dir/$name"
+                removed=1
             fi
-            ok "Removed $dir/$APP_NAME"
-            removed=1
-        fi
+        done
     done
     [ "$removed" -eq 1 ] || info "$APP_NAME is not installed in any known location"
     echo "  Your collections are kept in the workspace file (see Settings in the app)."

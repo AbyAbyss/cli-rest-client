@@ -3,7 +3,7 @@
 
 set -e
 
-APP_NAME="term-rest-client"
+APP_NAME="rest"
 BIN_DIR="bin"
 
 if [ ! -f "$BIN_DIR/$APP_NAME" ]; then

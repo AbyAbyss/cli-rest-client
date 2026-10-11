@@ -2,6 +2,8 @@
 
 A terminal REST API client written in Go with [tview](https://github.com/rivo/tview). Build requests, organise them into collections, use variables, script simple pre-request steps and response tests, all without leaving the terminal. Saved requests can also be run from the command line, which makes them usable in CI.
 
+The command is `rest`: `rest` opens the app, `rest -gui` opens it in your browser, and `rest run`, `rest load` and the rest work from scripts. (Before v0.6.0 it was called `term-rest-client`; the installers keep that name working as a link to `rest`.)
+
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
 
@@ -23,19 +25,19 @@ A terminal REST API client written in Go with [tview](https://github.com/rivo/tv
 - **Response viewer**: status, timing, size, the request headers that were actually sent, response headers, pretty-printed and colour-highlighted JSON, and test results. Each section folds open or closed with a key or a click, and the app remembers your choice. Press `s` to save the body to a file.
 - **History, like Postman**: every request you send is listed in the sidebar's History view, grouped by day. Open one to see the request and the response it got, send it again, save it to a collection, filter, or delete. Kept in a separate file so your workspace file stays clean in git.
 - **Import from cURL**: paste a curl command (from browser dev tools, API docs or Postman) into the URL field and it becomes a request, with headers, auth, body and params filled in.
-- **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `term-rest-client import` / `export` on the command line.
+- **Import from and export to Postman**: collections (v2.0/v2.1, with folders, auth, bodies and params), environments and globals. `Ctrl+O` imports and `x` exports in the app; `rest import` / `export` on the command line.
 - **Code snippets, like Postman's `</>` panel**: `Ctrl+G` shows the current request as curl, Python (`requests`), JavaScript (`fetch`), Go (`net/http`) or HTTPie, and `c` copies it to the clipboard. `y` copies a request straight from the Collections tree or History. Variables can be filled in or kept as variables in the code.
 - JSON formatter (`Ctrl+P`), request cancel (`Esc`).
 - **Settings**: four themes (Catppuccin Mocha, Original, Gruvbox Dark, Light), timeout, redirect following, TLS verification.
 - **Mouse support**: click any field or tab, scroll the response.
-- **Browser interface**: `term-rest-client -gui` opens the same workspace in your browser, with tabs, a collections tree, live streams, WebSockets, a GraphQL schema browser, a JSON tree, history and a command palette (`Ctrl+K`). Requests still run in the term-rest-client process, so there's no CORS, and it's all inside the one binary.
-- **Load testing**: `term-rest-client load` (or `Alt+L` in the app, or the browser's Load test dialog) runs a request or a whole folder under load. Use virtual users, a fixed request rate, or ramping stages (`30s:50,1m:50,30s:0`). You get live charts, p50/p95/p99 latency, error rates, your tests as checks, and thresholds like `p95<300ms` that fail CI.
-- **Headless mode**: `term-rest-client run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
+- **Browser interface**: `rest -gui` opens the same workspace in your browser, with tabs, a collections tree, live streams, WebSockets, a GraphQL schema browser, a JSON tree, history and a command palette (`Ctrl+K`). Requests still run in the term-rest-client process, so there's no CORS, and it's all inside the one binary.
+- **Load testing**: `rest load` (or `Alt+L` in the app, or the browser's Load test dialog) runs a request or a whole folder under load. Use virtual users, a fixed request rate, or ramping stages (`30s:50,1m:50,30s:0`). You get live charts, p50/p95/p99 latency, error rates, your tests as checks, and thresholds like `p95<300ms` that fail CI.
+- **Headless mode**: `rest run "Collection/Folder/Request"` (or a whole folder) sends saved requests, prints results and exits non-zero when a test fails.
 
 ## Screenshots
 
 ![Browser interface streaming Server-Sent Events](assets/screenshots/gui.png)
-**`term-rest-client -gui`**: the browser interface, here following a Server-Sent Events stream live
+**`rest -gui`**: the browser interface, here following a Server-Sent Events stream live
 
 | | |
 |---|---|
@@ -70,9 +72,9 @@ On macOS (Apple Silicon or Intel) or Linux (x86_64 or arm64):
 curl -fsSL https://raw.githubusercontent.com/AbyAbyss/cli-rest-client/main/get.sh | sh
 ```
 
-It downloads the right binary from the [latest release](https://github.com/AbyAbyss/cli-rest-client/releases/latest), checks it against the release's `SHA256SUMS`, and installs it to `/usr/local/bin`, `/opt/homebrew/bin` or `~/.local/bin` (whichever is writable first; `INSTALL_DIR=...` to choose). `VERSION=v0.2.0` installs a specific release. On Windows, download `term-rest-client-windows-amd64.zip` from the releases page and put `term-rest-client.exe` somewhere on your `PATH`.
+It downloads the right binary from the [latest release](https://github.com/AbyAbyss/cli-rest-client/releases/latest), checks it against the release's `SHA256SUMS`, and installs it as `rest` in `/usr/local/bin`, `/opt/homebrew/bin` or `~/.local/bin` (whichever is writable first; `INSTALL_DIR=...` to choose), with `term-rest-client` as a link to it. `VERSION=v0.6.0` installs a specific release. If another program called `rest` comes first on your `PATH`, the installer says so; run this one as `term-rest-client` then. On Windows, download `rest-windows-amd64.zip` from the releases page and put `rest.exe` somewhere on your `PATH`.
 
-If you download a macOS archive with a browser instead, macOS marks it as quarantined and refuses to open an unsigned binary. Clear the flag once with `xattr -d com.apple.quarantine term-rest-client`. Files fetched with `curl` (as above) aren't marked.
+If you download a macOS archive with a browser instead, macOS marks it as quarantined and refuses to open an unsigned binary. Clear the flag once with `xattr -d com.apple.quarantine rest`. Files fetched with `curl` (as above) aren't marked.
 
 ### Build from source
 
@@ -95,10 +97,10 @@ make install            # same as ./install.sh
 Then open any terminal window and run:
 
 ```bash
-term-rest-client                          # launch the REST client
-term-rest-client list                     # list saved requests
-term-rest-client run "Auth API/Login"     # send a saved request without the UI
-term-rest-client -version
+rest                          # launch the REST client
+rest list                     # list saved requests
+rest run "Auth API/Login"     # send a saved request without the UI
+rest -version
 ```
 
 `make install` picks the first of these it can write to: `/usr/local/bin`, `/opt/homebrew/bin` (Apple Silicon Homebrew), or `~/.local/bin`. If it ends up in a folder that isn't on your `PATH`, it prints the exact line to add to `~/.zshrc` (the default shell on macOS). For example:
@@ -116,16 +118,9 @@ Other install commands:
 | `INSTALL_DIR=/usr/local/bin make install` | Install to a specific folder (asks for your password if it needs `sudo`) |
 | `make uninstall` | Remove the installed binary. Your collections are kept |
 | `git pull && make install` | Update to the latest version |
-| `make build` | Just build `./bin/term-rest-client` without installing |
+| `make build` | Just build `./bin/rest` without installing |
 | `make build-mac-universal` | One binary for both Intel and Apple Silicon Macs, in `dist/` |
 | `make build-linux` | Linux binaries for amd64 and arm64, in `dist/` |
-
-Want a shorter command? Add an alias to `~/.zshrc`:
-
-```bash
-echo "alias rest='term-rest-client'" >> ~/.zshrc && source ~/.zshrc
-rest
-```
 
 #### Linux: install as a command you can run from any terminal
 
@@ -168,22 +163,22 @@ To install system-wide for all users instead (asks for your password once, for t
 INSTALL_DIR=/usr/local/bin make install
 ```
 
-**3. Run it** from any terminal: `term-rest-client`. `make uninstall`, `git pull && make install` and the `rest` alias work exactly as on macOS (put the alias in `~/.bashrc` instead of `~/.zshrc` if you use bash).
+**3. Run it** from any terminal: `rest`. `make uninstall` and `git pull && make install` work exactly as on macOS.
 
 **Servers without Go.** Build on any machine and copy the binary over. It's a single static file with no dependencies:
 
 ```bash
-make build-linux        # dist/term-rest-client-linux-amd64 and -linux-arm64
-scp dist/term-rest-client-linux-amd64 user@server:~/.local/bin/term-rest-client
+make build-linux        # dist/rest-linux-amd64 and -linux-arm64
+scp dist/rest-linux-amd64 user@server:~/.local/bin/rest
 ```
 
-Over SSH the UI works in any terminal; `term-rest-client run ...` is handy for scripted checks on servers.
+Over SSH the UI works in any terminal; `rest run ...` is handy for scripted checks on servers.
 
 #### Windows
 
 ```cmd
 build.bat
-bin\term-rest-client.exe
+bin\rest.exe
 ```
 
 See [docs/WINDOWS.md](docs/WINDOWS.md) for PowerShell and other options.
@@ -191,28 +186,28 @@ See [docs/WINDOWS.md](docs/WINDOWS.md) for PowerShell and other options.
 #### With `go install`
 
 ```bash
-go install github.com/AbyAbyss/cli-rest-client/cmd/term-rest-client@latest
+go install github.com/AbyAbyss/cli-rest-client/cmd/rest@latest
 ```
 
 This puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`), which needs to be on your `PATH`.
 
 ### Try it with the samples
 
-A new workspace file starts with sample collections: a user service, auth, payments, and GraphQL, SSE and WebSocket examples. `term-rest-client demo` runs a small local server that answers all of them, so you can try everything offline without touching your own workspace:
+A new workspace file starts with sample collections: a user service, auth, payments, and GraphQL, SSE and WebSocket examples. `rest demo` runs a small local server that answers all of them, so you can try everything offline without touching your own workspace:
 
 ```bash
-term-rest-client demo                    # leave this running (Ctrl+C stops it)
+rest demo                    # leave this running (Ctrl+C stops it)
 
 # in another terminal
-term-rest-client -data demo.json         # the app, with its own sample workspace
-term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
+rest -data demo.json         # the app, with its own sample workspace
+rest -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
 ```
 
 The sample's **Local** environment points at the demo server (`localhost:8080`); **httpbin.org** uses the public httpbin.org instead. `-addr localhost:9090` runs the demo on another port.
 
 #### Test endpoints for each API type
 
-With `term-rest-client demo` running, these work in any workspace (no internet needed):
+With `rest demo` running, these work in any workspace (no internet needed):
 
 | Type | How to set it up in the app |
 |------|-----------------------------|
@@ -244,16 +239,16 @@ See [QUICKSTART.md](QUICKSTART.md) and [docs/BUILD.md](docs/BUILD.md) for more b
 ## Browser interface
 
 ```bash
-term-rest-client -gui                 # opens your browser on a free port
-term-rest-client -gui -port 7300      # a port of your choice; a busy port falls back to a free one
-term-rest-client -gui -lan            # also reachable from other devices on your network
-term-rest-client -gui -no-open        # print the link without opening a browser
+rest -gui                 # opens your browser on a free port
+rest -gui -port 7300      # a port of your choice; a busy port falls back to a free one
+rest -gui -lan            # also reachable from other devices on your network
+rest -gui -no-open        # print the link without opening a browser
 ```
 
 It prints where it's listening and opens the first link:
 
 ```
-  term-rest-client GUI is running
+  rest GUI is running
 
   Local:   http://localhost:51234/?t=6f1c...
            http://127.0.0.1:51234/?t=6f1c...
@@ -377,7 +372,7 @@ Copy a request as cURL (Chrome or Firefox dev tools: right-click a request → *
 
 - **paste it into the URL field**: it turns into a request straight away (method, URL, query params, headers, auth, body), unsaved, ready to send with `Ctrl+R` or save with `Ctrl+S`. Typing `curl ...` in the URL field and pressing `Enter` does the same;
 - or press `Ctrl+O` and paste one or more commands. Several commands become a new collection called "cURL import";
-- or from a terminal: `term-rest-client curl -into "Shop API/Orders" -X POST https://api.example.com/orders -d '{"qty":1}'`, `pbpaste | term-rest-client curl` (reads standard input), or `term-rest-client import calls.sh` for a file of curl commands.
+- or from a terminal: `rest curl -into "Shop API/Orders" -X POST https://api.example.com/orders -d '{"qty":1}'`, `pbpaste | rest curl` (reads standard input), or `rest import calls.sh` for a file of curl commands.
 
 Understood:
 
@@ -440,7 +435,7 @@ Every snippet is checked in the test suite by running it (Python, Node, Go and H
 
 The clipboard is reached through `pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux (whichever is installed), and `clip` on Windows or WSL. Over SSH, or when none of those exist, the app sends the text to your terminal with the OSC 52 escape sequence, which iTerm2, kitty, WezTerm, Alacritty, Windows Terminal and tmux (with `set -g set-clipboard on`) understand. macOS Terminal.app doesn't support OSC 52, so over SSH from Terminal.app open the window with `Ctrl+G` and select the text instead.
 
-From a terminal: `term-rest-client export -lang python "Payment Gateway/Charges/Charge"` prints the code (`-lang` takes `curl`, `python`, `javascript`, `go` or `httpie`; `-curl` is short for `-lang curl`). `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
+From a terminal: `rest export -lang python "Payment Gateway/Charges/Charge"` prints the code (`-lang` takes `curl`, `python`, `javascript`, `go` or `httpie`; `-curl` is short for `-lang curl`). `-raw` keeps `{{variables}}`, and a collection or folder name prints every request inside it. Pipe it to `pbcopy` to copy it.
 
 ### Streaming responses (Server-Sent Events, NDJSON)
 
@@ -458,7 +453,7 @@ A response with `Content-Type: text/event-stream` (Server-Sent Events) or an NDJ
 - The request timeout only covers the wait for the response headers, so a stream can run as long as the server keeps it open.
 - `Esc` stops the stream. Everything that arrived is kept, the tests run on it, and it goes into History like any response.
 - Tests can use `events` and `event[i]` (see [Tests](#tests)).
-- On the command line, `run` follows a stream until it ends or `-stream` runs out (the timeout setting by default), then stops it and runs the tests: `term-rest-client run -stream 10s "API Types/Live events (SSE)"`.
+- On the command line, `run` follows a stream until it ends or `-stream` runs out (the timeout setting by default), then stops it and runs the tests: `rest run -stream 10s "API Types/Live events (SSE)"`.
 
 The sample **API Types / Live events (SSE)** request follows Wikimedia's public stream of edits to Wikipedia, which never ends, so press `Esc` when you've seen enough.
 
@@ -506,7 +501,7 @@ Postman keeps WebSocket requests outside its collection format, so exporting a f
 In Postman, export what you need (**Export** on a collection, choose **Collection v2.1**; environments and globals export from their own menus), then:
 
 - in the app press `Ctrl+O` (or `i` in the Collections tree) and enter the file path, or
-- from a terminal: `term-rest-client import ~/Downloads/Shop.postman_collection.json ~/Downloads/Staging.postman_environment.json`
+- from a terminal: `rest import ~/Downloads/Shop.postman_collection.json ~/Downloads/Staging.postman_environment.json`
 
 The file type is detected automatically.
 
@@ -536,9 +531,9 @@ Anything that doesn't carry over (OAuth 2 and other auth types, file uploads, co
 - From a terminal:
 
 ```bash
-term-rest-client export -o Users.postman_collection.json "User Service/Users"
-term-rest-client export -env Local -o Local.postman_environment.json
-term-rest-client export -globals > globals.postman_globals.json
+rest export -o Users.postman_collection.json "User Service/Users"
+rest export -env Local -o Local.postman_environment.json
+rest export -globals > globals.postman_globals.json
 ```
 
 The app suggests a file name in the folder you last imported from or exported to, and asks before replacing an existing file.
@@ -558,11 +553,11 @@ Exporting and importing again gives back the same requests; the test suite check
 Run a saved request, or every request in a folder in order, under load:
 
 ```bash
-term-rest-client load -vus 20 -duration 1m "Shop API/Checkout"               # 20 virtual users for a minute
-term-rest-client load -stages 30s:50,1m:50,30s:0 "Shop API"                  # ramp up to 50, hold, ramp down
-term-rest-client load -stages 10s:5,10s:100,30s:100,10s:5 "Shop API/Search"  # a spike
-term-rest-client load -rate 200/s -duration 1m "Shop API/Search"             # 200 iterations a second, however slow it gets
-term-rest-client load -vus 10 -duration 30s -threshold "p95<300ms,errors<1%" -out results.json "Shop API"
+rest load -vus 20 -duration 1m "Shop API/Checkout"               # 20 virtual users for a minute
+rest load -stages 30s:50,1m:50,30s:0 "Shop API"                  # ramp up to 50, hold, ramp down
+rest load -stages 10s:5,10s:100,30s:100,10s:5 "Shop API/Search"  # a spike
+rest load -rate 200/s -duration 1m "Shop API/Search"             # 200 iterations a second, however slow it gets
+rest load -vus 10 -duration 30s -threshold "p95<300ms,errors<1%" -out results.json "Shop API"
 ```
 
 In the terminal app, `Alt+L` (or `F7`) load tests the open request, and `l` in the Collections tree load tests the selected request or folder. In the browser UI, use **Load test…** in a request's or folder's menu, or the command palette.
@@ -594,8 +589,8 @@ The demo server has endpoints for trying this out:
 - `/status/503` answers with any status.
 
 ```bash
-term-rest-client demo &
-term-rest-client -data demo.json load -env Local -stages 10s:20,20s:20,5s:0 -threshold "p95<200ms" "Auth API"
+rest demo &
+rest -data demo.json load -env Local -stages 10s:20,20s:20,5s:0 -threshold "p95<200ms" "Auth API"
 ```
 
 Load tests send HTTP requests; WebSocket requests in a folder are skipped. Streaming responses (SSE) are read until the server closes them or the timeout ends them, so they make poor load test targets.
@@ -626,7 +621,7 @@ Every request you send is recorded, like Postman's History tab. Switch the sideb
 
 Each entry keeps the request as you wrote it (with `{{variables}}`, so sending it again uses current values), the resolved URL and headers that were sent, the status, timing, response headers, test results, and up to 64 KB of the response body. Failed requests (connection refused, timeouts) are recorded too. The newest 200 entries are kept.
 
-History is stored next to the workspace file as `<name>.history.json` (for example `workspace.history.json`), so committing a workspace file doesn't pick up your request log. Turn recording off with **Record history** in Settings. `term-rest-client history` prints recent entries from the command line.
+History is stored next to the workspace file as `<name>.history.json` (for example `workspace.history.json`), so committing a workspace file doesn't pick up your request log. Turn recording off with **Record history** in Settings. `rest history` prints recent entries from the command line.
 
 ### Response sections
 
@@ -715,23 +710,23 @@ Subjects: `status`, `time`, `size`, `body`, `header <Name>`, `json.<path>`, `eve
 ## Command-line mode
 
 ```bash
-term-rest-client list                                   # list saved requests
-term-rest-client run "User Service/Lookup/Get JSON"     # one request, by its full path
-term-rest-client run "User Service/Users"               # everything in a folder, sub-folders included
-term-rest-client run "Auth API" "Payment Gateway"       # whole collections, in order
-term-rest-client run "Health Check"                     # a top-level request
-term-rest-client run -env Local "User Service"          # use a different environment for this run
-term-rest-client env                                    # list environments (* marks the active one)
-term-rest-client env Staging                            # switch the active environment ("none" or "global" for Globals only)
-term-rest-client demo                                   # local demo server for the sample workspace's Local environment
-term-rest-client load -vus 20 -duration 1m "Shop API"   # load test with 20 virtual users (see Load testing)
-term-rest-client history -n 10                          # the last 10 requests sent from the app
-term-rest-client import Shop.postman_collection.json    # import Postman collections, environments or globals
-term-rest-client curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
-term-rest-client export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
-term-rest-client export -curl "Auth API/Bearer Token"    # print a request as a curl command (-raw keeps {{variables}})
-term-rest-client export -lang go "Auth API/Login"        # or as python, javascript, go or httpie code
-term-rest-client run -v -set baseUrl=http://localhost:8080 "User Service"
+rest list                                   # list saved requests
+rest run "User Service/Lookup/Get JSON"     # one request, by its full path
+rest run "User Service/Users"               # everything in a folder, sub-folders included
+rest run "Auth API" "Payment Gateway"       # whole collections, in order
+rest run "Health Check"                     # a top-level request
+rest run -env Local "User Service"          # use a different environment for this run
+rest env                                    # list environments (* marks the active one)
+rest env Staging                            # switch the active environment ("none" or "global" for Globals only)
+rest demo                                   # local demo server for the sample workspace's Local environment
+rest load -vus 20 -duration 1m "Shop API"   # load test with 20 virtual users (see Load testing)
+rest history -n 10                          # the last 10 requests sent from the app
+rest import Shop.postman_collection.json    # import Postman collections, environments or globals
+rest curl -X POST https://x.test/a -d 'k=v'  # save a curl command as a request (or pipe commands in)
+rest export -o Shop.json "Shop API"          # export a collection (or "-env NAME", "-globals") for Postman
+rest export -curl "Auth API/Bearer Token"    # print a request as a curl command (-raw keeps {{variables}})
+rest export -lang go "Auth API/Login"        # or as python, javascript, go or httpie code
+rest run -v -set baseUrl=http://localhost:8080 "User Service"
 ```
 
 Paths are `Collection/Folder/.../Request`, matched case-insensitively; `list` prints them, and a path that matches nothing gets suggestions. The examples above use the sample workspace; see [Try it with the samples](#try-it-with-the-samples) to run them as they are. `-env none` (or `-env global`) uses the global variables only. `-v` prints the request line and sent headers (`>`) and the response status and headers (`<`), like `curl -v`, followed by the body. `run` executes pre-request scripts and tests just like the UI, prints a line per test, and exits with status 1 if a request fails or any test fails. `-set name=value` overrides a variable for this run only. Values captured with `set` in tests are saved to the workspace. `-env NAME` uses that environment for the run without changing which one is active (captured values go into it). `-stream DURATION` sets how long streams and WebSockets are followed (the timeout setting by default); see [Streaming responses](#streaming-responses-server-sent-events-ndjson) and [WebSocket](#websocket).
@@ -752,7 +747,7 @@ Use `-data path/to/file.json` or the `TERM_REST_CLIENT_DATA` environment variabl
 
 ```
 cli-rest-client/
-├── cmd/term-rest-client/   # entry point, flags, list/run commands dispatch
+├── cmd/rest/               # entry point, flags, list/run commands dispatch
 ├── internal/
 │   ├── cli/                # headless "list" and "run" commands
 │   ├── clipboard/          # copy text via pbcopy, wl-copy, xclip, xsel, clip or OSC 52

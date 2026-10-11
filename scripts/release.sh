@@ -4,14 +4,15 @@
 #   scripts/release.sh            version from `git describe`
 #   scripts/release.sh v0.2.0     explicit version
 #
-# Produces dist/term-rest-client-<os>-<arch>.tar.gz (.zip for Windows), each
-# holding the binary, README.md and LICENSE, plus dist/SHA256SUMS. The names
-# carry no version, so ".../releases/latest/download/<name>" always works.
+# Produces dist/rest-<os>-<arch>.tar.gz (.zip for Windows), each holding the
+# rest binary (rest.exe on Windows), README.md and LICENSE, plus
+# dist/SHA256SUMS. The names carry no version, so
+# ".../releases/latest/download/<name>" always works.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP=term-rest-client
+APP=rest
 VERSION="${1:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 BUILD_TIME="$(date -u '+%Y-%m-%d_%H:%M:%S')"
 LDFLAGS="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}"
@@ -29,7 +30,7 @@ for target in $TARGETS; do
     mkdir -p "$stage"
     echo "==> ${os}/${arch}"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "$LDFLAGS" \
-        -o "${stage}/${APP}${ext}" ./cmd/term-rest-client
+        -o "${stage}/${APP}${ext}" ./cmd/rest
     cp README.md LICENSE "$stage/"
     if [ "$os" = windows ]; then
         (cd dist && zip -qr "${name}.zip" "$name")

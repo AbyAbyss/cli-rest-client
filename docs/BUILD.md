@@ -23,7 +23,7 @@ build.bat
 
 **Using Go directly:**
 ```cmd
-go build -o bin\term-rest-client.exe .\cmd\term-rest-client
+go build -o bin\rest.exe .\cmd\rest
 ```
 
 ### Linux / macOS
@@ -36,7 +36,7 @@ chmod +x build.sh
 
 **Using Go directly:**
 ```bash
-go build -o bin/term-rest-client ./cmd/term-rest-client
+go build -o bin/rest ./cmd/rest
 ```
 
 ## Cross-Platform Building
@@ -63,20 +63,20 @@ make build-all
 **Windows:**
 ```bash
 make build-windows
-# Output: dist/term-rest-client-windows-amd64.exe
+# Output: dist/rest-windows-amd64.exe
 ```
 
 **Linux:**
 ```bash
 make build-linux
-# Output: dist/term-rest-client-linux-amd64
+# Output: dist/rest-linux-amd64
 ```
 
 **macOS (Intel):**
 ```bash
 make build-darwin
-# Output: dist/term-rest-client-darwin-amd64
-#         dist/term-rest-client-darwin-arm64
+# Output: dist/rest-darwin-amd64
+#         dist/rest-darwin-arm64
 ```
 
 ## Manual Cross-Compilation
@@ -85,16 +85,16 @@ You can manually build for any platform using Go's cross-compilation:
 
 ```bash
 # Windows
-GOOS=windows GOARCH=amd64 go build -o dist/term-rest-client-windows-amd64.exe ./cmd/term-rest-client
+GOOS=windows GOARCH=amd64 go build -o dist/rest-windows-amd64.exe ./cmd/rest
 
 # Linux
-GOOS=linux GOARCH=amd64 go build -o dist/term-rest-client-linux-amd64 ./cmd/term-rest-client
+GOOS=linux GOARCH=amd64 go build -o dist/rest-linux-amd64 ./cmd/rest
 
 # macOS Intel
-GOOS=darwin GOARCH=amd64 go build -o dist/term-rest-client-darwin-amd64 ./cmd/term-rest-client
+GOOS=darwin GOARCH=amd64 go build -o dist/rest-darwin-amd64 ./cmd/rest
 
 # macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o dist/term-rest-client-darwin-arm64 ./cmd/term-rest-client
+GOOS=darwin GOARCH=arm64 go build -o dist/rest-darwin-arm64 ./cmd/rest
 ```
 
 ## Using Make
@@ -154,7 +154,7 @@ For development, you can use:
 
 ```bash
 # Watch mode (requires additional tooling)
-go run ./cmd/term-rest-client
+go run ./cmd/rest
 
 # Or build and run
 make build && make run
@@ -171,7 +171,7 @@ BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
 
 # Build with version info
 go build -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME" \
-  -o bin/term-rest-client ./cmd/term-rest-client
+  -o bin/rest ./cmd/rest
 ```
 
 The Makefile handles this automatically when you use `make build`.

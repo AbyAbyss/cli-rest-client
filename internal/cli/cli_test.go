@@ -381,7 +381,7 @@ func TestHelpfulErrors(t *testing.T) {
 		t.Fatal("unknown path should exit 2")
 	}
 	msg := errOut.String()
-	for _, want := range []string{"Did you mean:\n  User Service\n  User Service/Get JSON", "That path is in the sample workspace", "-data demo.json list", "term-rest-client list"} {
+	for _, want := range []string{"Did you mean:\n  User Service\n  User Service/Get JSON", "That path is in the sample workspace", "-data demo.json list", "rest list"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("missing %q in:\n%s", want, msg)
 		}

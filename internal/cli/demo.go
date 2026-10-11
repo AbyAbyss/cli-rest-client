@@ -43,8 +43,8 @@ func Demo(ctx context.Context, out, errOut io.Writer, args []string) int {
 It answers every request in the sample workspace, including the GraphQL,
 Server-Sent Events and WebSocket samples. In another terminal:
 
-  term-rest-client -data demo.json        # the app, with a fresh sample workspace
-  term-rest-client -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
+  rest -data demo.json        # the app, with a fresh sample workspace
+  rest -data demo.json run -env Local "Auth API" "User Service/Lookup" "Payment Gateway"
 
 -data demo.json keeps the samples in their own file, away from your workspace.
 `, base)

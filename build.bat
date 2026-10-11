@@ -2,8 +2,8 @@
 REM Build script for Windows
 setlocal
 
-set APP_NAME=term-rest-client
-set CMD_DIR=cmd\term-rest-client
+set APP_NAME=rest
+set CMD_DIR=cmd\rest
 set BIN_DIR=bin
 
 echo Building %APP_NAME%...

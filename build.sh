@@ -3,8 +3,8 @@
 
 set -e
 
-APP_NAME="term-rest-client"
-CMD_DIR="cmd/term-rest-client"
+APP_NAME="rest"
+CMD_DIR="cmd/rest"
 BIN_DIR="bin"
 DIST_DIR="dist"
 

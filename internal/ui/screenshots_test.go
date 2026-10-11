@@ -278,7 +278,7 @@ func TestScreenshots(t *testing.T) {
 	cws.SetActive("Local")
 	var out bytes.Buffer
 	cli.Run(&out, &out, cws, nil, []string{"User Service", "Payment Gateway"})
-	writeCLIShot(t, dir, "cli", `term-rest-client run "User Service" "Payment Gateway"`, out.String(), themes[0])
+	writeCLIShot(t, dir, "cli", `rest run "User Service" "Payment Gateway"`, out.String(), themes[0])
 }
 
 func hexColor(c tcell.Color, fallback tcell.Color) string {

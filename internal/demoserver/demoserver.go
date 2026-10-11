@@ -1,6 +1,6 @@
 // Package demoserver is a small httpbin.org look-alike with the extra
 // endpoints the sample workspace uses: Server-Sent Events, NDJSON, GraphQL
-// and WebSocket. The tests run against it, and `term-rest-client demo`
+// and WebSocket. The tests run against it, and `rest demo`
 // serves it so the samples work offline.
 package demoserver
 

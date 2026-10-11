@@ -1,7 +1,7 @@
 .PHONY: release build run test test-coverage vet clean fmt lint install uninstall build-mac-universal screenshots deps update-deps build-all build-linux build-windows build-darwin help
 
 # Application name
-APP_NAME := term-rest-client
+APP_NAME := rest
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)
@@ -21,7 +21,7 @@ EXT := .exe
 endif
 
 # Directories
-CMD_DIR := cmd/term-rest-client
+CMD_DIR := cmd/rest
 BIN_DIR := bin
 DIST_DIR := dist
 

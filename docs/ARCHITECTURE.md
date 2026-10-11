@@ -3,7 +3,7 @@
 ## Packages
 
 ```
-cmd/term-rest-client   main: flags, workspace loading, starts the UI or the list/run commands
+cmd/rest               main: flags, workspace loading, starts the UI or the list/run commands
 internal/models        Workspace, Collection (with nested Folders), Request, ...; tree helpers in tree.go
 internal/storage       JSON workspace file: Load, atomic Save, DefaultPath, SampleWorkspace
 internal/vars          {{name}} substitution and dynamic variables ($uuid, $timestamp, ...)

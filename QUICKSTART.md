@@ -1,25 +1,25 @@
 # Quick Start Guide
 
-## macOS: install the `term-rest-client` command
+## macOS: install the `rest` command
 
 ```bash
 brew install go                 # if Go isn't installed yet
 git clone https://github.com/AbyAbyss/cli-rest-client.git
 cd cli-rest-client
 make install                    # builds and puts it on your PATH
-term-rest-client                # run from any terminal
+rest                # run from any terminal
 ```
 
 `make uninstall` removes it again. See the README for details.
 
-## Linux: install the `term-rest-client` command
+## Linux: install the `rest` command
 
 ```bash
 sudo apt install git make && sudo snap install go --classic   # Ubuntu/Debian; see README for other distros
 git clone https://github.com/AbyAbyss/cli-rest-client.git
 cd cli-rest-client
 make install                    # installs to ~/.local/bin
-term-rest-client                # run from any terminal
+rest                # run from any terminal
 ```
 
 If the command isn't found, open a new terminal or follow the PATH line the installer prints.
@@ -35,13 +35,13 @@ run.bat
 ### Option 2: PowerShell
 ```powershell
 .\build.ps1
-.\bin\term-rest-client.exe
+.\bin\rest.exe
 ```
 
 ### Option 3: Go Directly
 ```cmd
-go build -o bin\term-rest-client.exe .\cmd\term-rest-client
-bin\term-rest-client.exe
+go build -o bin\rest.exe .\cmd\rest
+bin\rest.exe
 ```
 
 ### Option 4: Make (if installed)
@@ -61,8 +61,8 @@ chmod +x build.sh run.sh
 
 ### Option 2: Go Directly
 ```bash
-go build -o bin/term-rest-client ./cmd/term-rest-client
-./bin/term-rest-client
+go build -o bin/rest ./cmd/rest
+./bin/rest
 ```
 
 ### Option 3: Make
@@ -116,5 +116,5 @@ For more details, see [docs/BUILD.md](docs/BUILD.md)
 Your collections are saved automatically. Run a saved request without the UI:
 
 ```bash
-./bin/term-rest-client run "User Service/Get JSON"
+./bin/rest run "User Service/Get JSON"
 ```
