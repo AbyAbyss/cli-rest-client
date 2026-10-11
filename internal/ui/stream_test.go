@@ -16,7 +16,8 @@ func TestStreamingResponse(t *testing.T) {
 	h := start(t, nil)
 
 	r := models.NewRequest("Deploy progress")
-	r.URL = srv.URL + "/sse?count=4&interval=60"
+	// 400ms apart, so the stream is still live when the screen is read below.
+	r.URL = srv.URL + "/sse?count=4&interval=400"
 	r.Tests = "status == 200\nevents == 4\nevent[-1].json.status == deploying\nevent[0].json.step == 1"
 	h.do(func() {
 		h.a.loadIntoBuilder(r, nil)

@@ -1,4 +1,4 @@
-// Package webui serves the browser interface (term-rest-client --gui).
+// Package webui serves the browser interface (rest -gui).
 //
 // The page is plain HTML, CSS and JavaScript embedded in the binary. Every
 // request it makes is executed here, by the same engine the terminal app
@@ -148,7 +148,7 @@ func (s *Server) api(h http.HandlerFunc) http.HandlerFunc {
 			tok = c.Value
 		}
 		if tok != s.token {
-			writeError(w, http.StatusUnauthorized, "open the link that term-rest-client --gui printed")
+			writeError(w, http.StatusUnauthorized, "open the link that rest -gui printed")
 			return
 		}
 		if o := r.Header.Get("Origin"); o != "" && !s.sameOrigin(o) {
@@ -167,7 +167,7 @@ func (s *Server) sameOrigin(origin string) bool {
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	if t := r.URL.Query().Get("t"); t != "" {
 		if t != s.token {
-			http.Error(w, "This link is out of date. Use the one term-rest-client --gui printed.", http.StatusUnauthorized)
+			http.Error(w, "This link is out of date. Use the one rest -gui printed.", http.StatusUnauthorized)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
@@ -179,7 +179,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `<!doctype html><meta charset="utf-8"><title>term-rest-client</title>`+
 			`<body style="font:16px system-ui;padding:3rem;background:#09090b;color:#fafafa">`+
-			`<h1>term-rest-client</h1><p>Open the link that <code>term-rest-client --gui</code> printed in your terminal. It includes a one-time key.</p>`)
+			`<h1>term-rest-client</h1><p>Open the link that <code>rest -gui</code> printed in your terminal. It includes a one-time key.</p>`)
 		return
 	}
 	page, _ := staticFiles.ReadFile("static/index.html")

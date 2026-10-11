@@ -44,9 +44,9 @@ func pathHint(ws *models.Workspace, name string) string {
 	}
 	if len(find(storage.SampleWorkspace(), name)) > 0 {
 		sb.WriteString("That path is in the sample workspace. To try the samples without changing your own\n" +
-			"workspace, use a new file: term-rest-client -data demo.json list\n")
+			"workspace, use a new file: rest -data demo.json list\n")
 	}
-	sb.WriteString("term-rest-client list shows every request path.")
+	sb.WriteString("rest list shows every request path.")
 	return sb.String()
 }
 

@@ -2,7 +2,7 @@
 REM Run script for Windows
 setlocal
 
-set APP_NAME=term-rest-client
+set APP_NAME=rest
 set BIN_DIR=bin
 
 if not exist %BIN_DIR%\%APP_NAME%.exe (

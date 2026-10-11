@@ -42,3 +42,5 @@ go.work
 # OS files
 Thumbs.db
 term-rest-client.exe
+rest.exe
+/rest

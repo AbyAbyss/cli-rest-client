@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The command is now `rest` instead of `term-rest-client`: `rest`, `rest -gui`,
+  `rest run`, `rest load` and so on. The installers (`get.sh`, `make install`) install
+  `rest` and keep `term-rest-client` as a link to it, replacing an older copy, so existing
+  scripts keep working; `make uninstall` removes both. `get.sh` warns when another
+  program called `rest` comes first on your `PATH`. Release archives are now
+  `rest-<os>-<arch>.tar.gz` (`rest.exe` in the Windows zip), and `go install` takes
+  `.../cmd/rest@latest`. The product name, the data folder (`term-rest-client`) and
+  `TERM_REST_CLIENT_DATA` are unchanged, so existing workspaces are found as before.
+
 ### Fixed
 - Browser UI: the Variables dialog listed environments as
   "[object HTMLDivElement], [object HTMLDivElement]" instead of their names, so they

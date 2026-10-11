@@ -1315,7 +1315,7 @@ function renderResponse() {
 function hintsFor(r) {
   const e = (r.error || "").toLowerCase();
   const tips = [];
-  if (e.includes("connection refused")) tips.push("Nothing is listening at that address. If it's the demo API, run term-rest-client demo in another terminal.");
+  if (e.includes("connection refused")) tips.push("Nothing is listening at that address. If it's the demo API, run rest demo in another terminal.");
   if (e.includes("no such host")) tips.push("The host name doesn't resolve. Check the URL and the active environment's variables.");
   if (e.includes("unsupported protocol") || e.includes("missing protocol")) tips.push("Start the URL with http:// or https://, or define the variable it starts with.");
   if (e.includes("certificate")) tips.push("For self-signed certificates, turn off TLS verification in Settings.");
@@ -1805,7 +1805,7 @@ async function runFolder(c) {
   const rows = h("div", { style: { border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" } });
   const sum = h("div", { class: "hint" }, "Running " + list.length + " requests in order…");
   let stopped = false;
-  const d = dialog({ title: "Run " + c.name, sub: "Each request is sent in order with its scripts and tests, like term-rest-client run.", wide: true, body: [sum, rows], footer: [btn("Close", { onclick: () => { stopped = true; d.close(); } })], onclose: () => { stopped = true; } });
+  const d = dialog({ title: "Run " + c.name, sub: "Each request is sent in order with its scripts and tests, like rest run.", wide: true, body: [sum, rows], footer: [btn("Close", { onclick: () => { stopped = true; d.close(); } })], onclose: () => { stopped = true; } });
   let passed = 0, failed = 0, errors = 0;
   for (const { r, path } of list) {
     if (stopped) break;
@@ -2371,7 +2371,7 @@ async function boot() {
     S.ws = st.workspace; S.ws.collections = S.ws.collections || []; S.ws.settings = S.ws.settings || {};
     S.history = st.history || []; S.info = st.info || {}; S.languages = st.languages || [];
   } catch (e) {
-    document.body.replaceChildren(h("div", { class: "empty", style: { height: "100vh" } }, h("div", null, h("div", { class: "art" }, icon("alert")), h("h3", null, "Can't reach term-rest-client"), h("p", null, e.message), h("p", null, "Is term-rest-client --gui still running? Open the link it printed."))));
+    document.body.replaceChildren(h("div", { class: "empty", style: { height: "100vh" } }, h("div", null, h("div", { class: "art" }, icon("alert")), h("h3", null, "Can't reach term-rest-client"), h("p", null, e.message), h("p", null, "Is rest -gui still running? Open the link it printed."))));
     return;
   }
   $("version").textContent = S.info.version && S.info.version !== "dev" ? "v" + S.info.version.replace(/^v/, "") : S.info.version || "";
