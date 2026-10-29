@@ -8,6 +8,7 @@ The command is `rest`: `rest` opens the app, `rest -gui` opens it in your browse
 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a-coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/abyabyss)
 
 ![Term REST Client: request builder, JSON body and response with passing tests](assets/screenshots/main.png)
 
@@ -802,6 +803,16 @@ The UI tests drive the real application through tcell's simulation screen (typin
 - `Ctrl+Enter` is only distinguishable from `Enter` in terminals with extended keyboard reporting. Use `Ctrl+R` or `F5` elsewhere.
 - Copying text uses your terminal's selection (usually `Shift` + drag while mouse support is on).
 - Response bodies over 50 MB are truncated; display is capped at 2 MB.
+
+## Support
+
+Term REST Client is free and MIT licensed. If it saves you time, a coffee keeps the updates coming:
+
+<p align="center">
+  <a href="https://buymeacoffee.com/abyabyss"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="50"></a>
+</p>
+
+Starring the repo, reporting bugs and telling a friend help just as much.
 
 ## License
 
